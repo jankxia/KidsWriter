@@ -1,0 +1,9 @@
+输出/
+__pycache__/
+*.pyc
+config.json
+_nas.py
+_t_*.py
+_remote_test.sh
+*.log
+.venv/

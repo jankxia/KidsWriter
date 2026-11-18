@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>童阅写稿器</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f7f4ec; color: #2b2b2b;
+  font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 14px; height: 100vh; display: flex; flex-direction: column;
+}
+header {
+  padding: 18px 26px 12px; display: flex; align-items: baseline; gap: 12px;
+  flex: 0 0 auto;
+}
+header h1 { font-size: 22px; letter-spacing: 1px; }
+header .ver { color: #b7ae9d; font-size: 12px; }
+header .flow { color: #9a917f; font-size: 12.5px; margin-left: auto; }
+main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-height: 0; }
+
+.col-left { flex: 0 0 336px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.col-right { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.card {
+  background: #fff; border-radius: 14px; padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .07);
+}
+.card h2 {
+  font-size: 13px; font-weight: 600; color: #6b6252; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 7px;
+}
+.card h2::before {
+  content: ""; width: 3px; height: 13px; background: #ff7a45; border-radius: 2px;
+}
+.field { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.field label { flex: 0 0 44px; color: #8a8172; font-size: 13px; }
+.field input, .field select {
+  flex: 1 1 auto; min-width: 0; height: 34px; padding: 0 10px;
+  border: 1px solid #e6e0d4; border-radius: 8px; background: #fdfcf9;
+  font-size: 13px; color: #2b2b2b; font-family: inherit; outline: none;
+}
+.field input:focus, .field select:focus { border-color: #ffb08c; background: #fff; }
+.row2 { display: flex; gap: 10px; }
+.row2 .field { flex: 1 1 0; margin-bottom: 9px; }
+.row2 .field label { flex: 0 0 auto; }
+
+.topic-box { display: flex; gap: 8px; }
+.topic-box textarea {
+  flex: 1 1 auto; min-height: 74px; resize: vertical; padding: 9px 10px;
+  border: 1px solid #e6e0d4; border-radius: 8px; background: #fdfcf9;
+  font-size: 13px; line-height: 1.55; font-family: inherit; color: #2b2b2b; outline: none;
+}
+.topic-box textarea:focus { border-color: #ffb08c; background: #fff; }
+.topic-side { flex: 0 0 64px; display: flex; flex-direction: column; gap: 6px; }
+.btn-ghost {
+  height: 34px; border: 1px solid #e6e0d4; background: #fff; border-radius: 8px;
+  color: #6b6252; font-size: 12.5px; cursor: pointer; font-family: inherit;
+}
+.btn-ghost:hover { border-color: #ffb08c; color: #d9633a; }
+.btn-ghost:disabled { opacity: .45; cursor: default; }
+
+.checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 4px; }
+.checks label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #6b6252; cursor: pointer; }
+.checks input { accent-color: #ff7a45; }
+
+.actions { display: flex; gap: 10px; margin-top: 12px; }
+.btn-main {
+  flex: 1 1 auto; height: 42px; border: none; border-radius: 10px;
+  background: #ff7a45; color: #fff; font-size: 14.5px; letter-spacing: 1px;
+  font-family: inherit; cursor: pointer; font-weight: 600;
+}
+.btn-main:hover { background: #f46a33; }
+.btn-main:disabled { background: #f0d9cd; color: #fff; cursor: default; }
+.btn-stop {
+  flex: 0 0 84px; height: 42px; border: 1px solid #e6e0d4; background: #fff;
+  border-radius: 10px; color: #8a8172; font-size: 13.5px; font-family: inherit; cursor: pointer;
+}
+.btn-stop:not(:disabled):hover { border-color: #ff7a45; color: #d9633a; }
+.btn-stop:disabled { opacity: .4; cursor: default; }
+
+.tasks {
+  flex: 0 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 9px;
+  min-height: 120px;
+}
+.tasks-head {
+  display: flex; align-items: center; gap: 10px; padding: 2px 2px 0;
+  font-size: 12.5px; color: #8a8172;
+}
+.tasks-head b { color: #d9633a; }
+.tasks-head .spacer { flex: 1 1 auto; }
+.btn-mini {
+  height: 30px; padding: 0 14px; border-radius: 8px; border: 1px solid #ffb08c;
+  background: #fff7f2; color: #d9633a; font-size: 12.5px; cursor: pointer; font-family: inherit;
+}
+.btn-mini:hover { background: #ffece1; }
+.btn-mini:disabled { opacity: .45; cursor: default; border-color: #e6e0d4; background: #faf8f3; color: #b7ae9d; }
+
+.t-empty { color: #b7ae9d; font-size: 12.5px; padding: 18px 2px; }
+
+.task {
+  background: #fff; border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .06);
+  border-left: 3px solid #eee6d8; display: flex; flex-direction: column; gap: 7px;
+}
+.task.run { border-left-color: #ff7a45; }
+.task.wait { border-left-color: #f0b429; }
+.task.done { border-left-color: #4fa96b; }
+.task.err { border-left-color: #d9534f; }
+.t-top { display: flex; align-items: baseline; gap: 8px; }
+.t-title { font-size: 14.5px; font-weight: 600; color: #2b2b2b; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; max-width: 62%; }
+.t-meta { font-size: 12px; color: #a09580; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-top .spacer { flex: 1 1 auto; }
+.t-state { font-size: 12.5px; white-space: nowrap; }
+.t-state .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.t-bar { height: 4px; background: #f2ecdf; border-radius: 3px; overflow: hidden; }
+.t-bar i { display: block; height: 100%; width: 0; border-radius: 3px; transition: width .35s ease; background: #ff7a45; }
+.t-bottom { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #8a8172; }
+.t-step { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-up {
+  height: 28px; padding: 0 14px; border-radius: 7px; border: none;
+  background: #ff7a45; color: #fff; font-size: 12.5px; cursor: pointer; font-family: inherit;
+}
+.t-up:disabled { background: #f0d9cd; cursor: default; }
+.t-up.gray { background: #efeade; color: #a09580; }
+.t-del {
+  height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid #e6e0d4;
+  background: #fff; color: #a09580; font-size: 12px; cursor: pointer;
+  font-family: inherit; flex: 0 0 auto;
+}
+.t-del:hover:not(:disabled) { border-color: #d9534f; color: #d9534f; }
+.t-del:disabled { opacity: .35; cursor: default; }
+
+.logs { flex: 0 0 34%; background: #fff; border-radius: 14px; display: flex; flex-direction: column;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .07); min-height: 120px; }
+.logs-head { display: flex; align-items: center; gap: 8px; padding: 11px 16px 8px; font-size: 13px;
+  font-weight: 600; color: #6b6252; }
+.logs-head::before { content: ""; width: 3px; height: 13px; background: #ff7a45; border-radius: 2px; }
+.logs-head .spacer { flex: 1 1 auto; }
+.logs-head span { font-size: 11.5px; color: #b7ae9d; font-weight: 400; }
+.log-body { flex: 1 1 auto; overflow-y: auto; padding: 0 16px 12px; font-size: 12px;
+  line-height: 1.75; color: #5c5347; font-family: Consolas, "Microsoft YaHei", monospace;
+  white-space: pre-wrap; word-break: break-all; }
+.log-body .em { color: #d9633a; }
+.log-body .write { color: #7a6ca8; }
+.log-body .run { color: #cf8a1f; }
+
+footer { flex: 0 0 auto; padding: 4px 28px 14px; font-size: 12px; color: #a09580;
+  display: flex; align-items: center; gap: 8px; }
+footer .dot { width: 7px; height: 7px; border-radius: 50%; background: #c9c0ae; }
+footer .dot.on { background: #ff7a45; box-shadow: 0 0 0 3px rgba(255,122,69,.15); }
+footer .dot.ok { background: #4fa96b; }
+</style>
+</head>
+<body>
+<header>
+  <h1>童阅写稿器</h1>
+  <span class="ver">v1.1</span>
+  <span class="flow">写稿 → 逐句配音 → 配封面 → 确认无误 → 点上传 → 电视端自动进列表</span>
+</header>
+
+<main>
+  <div class="col-left">
+    <div class="card">
+      <h2>网盘</h2>
+      <div class="field"><label>服务器</label><input id="server" placeholder="https://list.717611.xyz"></div>
+      <div class="field"><label>账号</label><input id="user" placeholder="admin"></div>
+      <div class="field"><label>密码</label><input id="password" type="password"></div>
+      <button class="btn-ghost" style="width:100%;height:34px;margin-top:4px" id="btnTest">测试连接</button>
+    </div>
+
+    <div class="card">
+      <h2>本次生成</h2>
+      <div class="field"><label>分类</label><select id="grade"></select></div>
+      <div class="row2">
+        <div class="field"><label>字数</label><input id="chars" type="number" min="80" max="2500" step="50"></div>
+        <div class="field"><label>篇数</label><input id="count" type="number" min="1" max="10"></div>
+      </div>
+      <div class="field" style="align-items:flex-start"><label style="padding-top:9px">主题</label>
+        <div class="topic-box">
+          <textarea id="topic" placeholder="留空则随机选题"></textarea>
+          <div class="topic-side">
+            <button class="btn-ghost" id="btnTopic">换一个</button>
+            <button class="btn-ghost" id="btnTopicClear">清空</button>
+          </div>
+        </div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="do_audio" checked>逐句配音</label>
+        <label><input type="checkbox" id="do_cover" checked>生成封面</label>
+        <label><input type="checkbox" id="skip_dup" checked>避开已有标题</label>
+        <label><input type="checkbox" id="offline">离线试跑</label>
+      </div>
+      <div class="actions">
+        <button class="btn-main" id="btnStart">开始生成</button>
+        <button class="btn-stop" id="btnStop" disabled>停止</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-right">
+    <div class="tasks-head">
+      <span id="taskSummary">还没有文章</span>
+      <div class="spacer"></div>
+      <button class="btn-mini" id="btnUploadAll" disabled>全部上传</button>
+    </div>
+    <div class="tasks" id="taskList"><div class="t-empty">点「开始生成」，这里会一篇一篇出现进度。</div></div>
+    <div class="logs">
+      <div class="logs-head">运行日志<div class="spacer"></div><span id="logStatus">就绪</span></div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span class="dot" id="statusDot"></span>
+  <span id="statusText">就绪</span>
+  <span style="margin-left:auto" id="portText"></span>
+</footer>
+
+<script>
+const GRADES = ["小学一年级","小学二年级","小学三年级","小学四年级","小学五年级","小学六年级",
+  "初中一年级","初中二年级","初中三年级","高中一年级","高中二年级","高中三年级","世界名著"];
+const $ = id => document.getElementById(id);
+let cursor = 0, logCount = 0, running = false;
+const cards = new Map();
+
+function fillGrades() {
+  $('grade').innerHTML = GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
+}
+
+async function boot() {
+  fillGrades();
+  try {
+    const c = await (await fetch('/api/config')).json();
+    $('server').value = c.server; $('user').value = c.user; $('password').value = c.password;
+    $('grade').value = c.grade || '小学二年级';
+    $('chars').value = c.chars; $('count').value = c.count;
+    $('portText').textContent = '服务端口 ' + c.port + ' · 封面图池 ' + c.covers + ' 张';
+  } catch (e) {}
+  await refreshTopic();
+}
+
+async function refreshTopic() {
+  try {
+    const t = await (await fetch('/api/topic')).json();
+    $('topic').value = t.topic;
+    $('topic').style.opacity = .35;
+    setTimeout(() => { $('topic').style.opacity = 1; }, 260);
+  } catch (e) {}
+}
+
+function stateCls(t) {
+  if (t.status === '失败' || t.status === '上传失败') return 'err';
+  if (t.status === '已上传') return 'done';
+  if (t.status === '待上传') return 'wait';
+  if (t.status === '排队中') return '';
+  return 'run';
+}
+function dotColor(cls) {
+  return {run: '#ff7a45', wait: '#f0b429', done: '#4fa96b', err: '#d9534f', '': '#c9c0ae'}[cls];
+}
+
+function makeCard(t) {
+  const el = document.createElement('div');
+  el.className = 'task';
+  el.innerHTML = `
+    <div class="t-top">
+      <span class="t-title"></span>
+      <span class="t-meta"></span>
+      <div class="spacer"></div>
+      <span class="t-state"><i class="dot"></i><span class="st"></span></span>
+    </div>
+    <div class="t-bar"><i></i></div>
+    <div class="t-bottom">
+      <span class="t-step"></span>
+      <button class="t-del" title="删除本地这篇">删除</button>
+      <button class="t-up" disabled>上传</button>
+    </div>`;
+  el.querySelector('.t-up').onclick = () => upload([t.id]);
+  el.querySelector('.t-del').onclick = () => dropOne(t.id);
+  return el;
+}
+
+function updateCard(el, t) {
+  const cls = stateCls(t);
+  el.className = 'task ' + cls;
+  el.querySelector('.t-title').textContent = t.title ? '《' + t.title + '》' : (t.topic || t.id).slice(0, 26);
+  const meta = [];
+  if (t.chars) meta.push(t.chars + ' 字');
+  if (t.sents) meta.push(t.sents + ' 句');
+  if (t.status === '上传中' || t.status === '已上传') meta.push('mp3 ' + t.upload_done_count + '/' + t.upload_total);
+  else if (t.mp3) meta.push(t.mp3 + ' 条音频');
+  if (t.cover) meta.push(t.cover.replace('.jpg',''));
+  if (t.category) meta.push(t.category);
+  el.querySelector('.t-meta').textContent = meta.join(' · ');
+  const st = el.querySelector('.st');
+  st.textContent = t.status + (t.error ? '：' + t.error : '');
+  const dot = el.querySelector('.dot');
+  dot.style.background = dotColor(cls);
+  const bar = el.querySelector('.t-bar i');
+  bar.style.width = Math.max(0, Math.min(100, t.progress || 0)) + '%';
+  bar.style.background = cls === 'done' ? '#4fa96b' : cls === 'wait' ? '#f0b429' : cls === 'err' ? '#d9534f' : '#ff7a45';
+  el.querySelector('.t-step').textContent = t.step || '';
+  const up = el.querySelector('.t-up');
+  const del = el.querySelector('.t-del');
+  const busy = ['写稿中', '配音中', '上传中', '排队中'].indexOf(t.status) >= 0;
+  del.disabled = busy;
+  if (t.upload_done) {
+    up.disabled = true; up.textContent = '已上传'; up.className = 't-up gray';
+  } else if (t.ready) {
+    up.disabled = false; up.textContent = '上传'; up.className = 't-up';
+  } else if (t.status === '上传中') {
+    up.disabled = true; up.textContent = '上传中…'; up.className = 't-up';
+  } else {
+    up.disabled = true; up.textContent = '上传'; up.className = 't-up';
+  }
+}
+
+function renderTasks(tasks) {
+  const list = $('taskList');
+  if (!tasks.length) {
+    if (!cards.size) list.innerHTML = '<div class="t-empty">点「开始生成」，这里会一篇一篇出现进度。</div>';
+    return;
+  }
+  const empty = list.querySelector('.t-empty');
+  if (empty) empty.remove();
+  for (const t of tasks) {
+    let el = cards.get(t.id);
+    if (!el) { el = makeCard(t); cards.set(t.id, el); list.appendChild(el); }
+    updateCard(el, t);
+  }
+  const readyN = tasks.filter(t => t.ready && !t.upload_done).length;
+  const upN = tasks.filter(t => t.upload_done).length;
+  const sum = [];
+  if (tasks.length) sum.push(`共 ${tasks.length} 篇`);
+  if (readyN) sum.push(`<b>${readyN} 篇待上传</b>`);
+  if (upN) sum.push(`已上传 ${upN} 篇`);
+  $('taskSummary').innerHTML = sum.length ? sum.join(' · ') : '还没有文章';
+  $('btnUploadAll').disabled = readyN === 0;
+}
+
+async function poll() {
+  try {
+    const d = await (await fetch('/api/state?since=' + cursor)).json();
+    running = d.running;
+    if (d.lines && d.lines.length) {
+      const body = $('logBody');
+      for (const ln of d.lines) {
+        const div = document.createElement('div');
+        if (ln.startsWith('===') || ln.startsWith('---')) div.className = 'em';
+        else if (ln.indexOf('[配音中]') >= 0 || ln.indexOf('[上传中]') >= 0) div.className = 'run';
+        else if (ln.indexOf('[写稿中]') >= 0) div.className = 'write';
+        div.textContent = ln || ' ';
+        body.appendChild(div);
+      }
+      logCount += d.lines.length;
+      $('logCount') && ($('logCount').textContent = logCount + ' 行');
+      body.scrollTop = body.scrollHeight;
+    }
+    cursor = d.from + (d.lines ? d.lines.length : 0);
+    renderTasks(d.tasks || []);
+    $('statusText').textContent = d.status || '就绪';
+    $('logStatus').textContent = d.status || '就绪';
+    const dot = $('statusDot');
+    dot.className = 'dot' + (d.running ? ' on' : (d.status.indexOf('失败') >= 0 ? '' : ' ok'));
+    $('btnStart').disabled = d.running;
+    $('btnStop').disabled = !d.running;
+    $('btnTopic').disabled = d.running;
+    $('btnTopicClear').disabled = d.running;
+  } catch (e) {}
+}
+
+async function start() {
+  const body = {
+    server: $('server').value.trim(), user: $('user').value.trim(), password: $('password').value,
+    grade: $('grade').value, chars: +$('chars').value || 400, count: +$('count').value || 1,
+    topic: $('topic').value.trim(),
+    do_audio: $('do_audio').checked, do_cover: $('do_cover').checked,
+    skip_dup: $('skip_dup').checked, offline: $('offline').checked
+  };
+  const r = await (await fetch('/api/start', {method:'POST', body: JSON.stringify(body)})).json();
+  if (!r.ok) alert(r.msg || '启动失败');
+}
+async function upload(ids) {
+  const r = await (await fetch('/api/upload', {method:'POST', body: JSON.stringify({ids})})).json();
+  if (!r.ok) alert(r.msg || '没有可上传的文章');
+}
+async function dropOne(id) {
+  if (!confirm('删除本地这篇？已上传到网盘的副本不受影响。')) return;
+  const r = await (await fetch('/api/delete', {method:'POST', body: JSON.stringify({id})})).json();
+  if (!r.ok) { alert(r.msg || '删除失败'); return; }
+  const el = cards.get(id);
+  if (el) el.remove();
+  cards.delete(id);
+  await poll();
+}
+
+async function testConn() {
+  await fetch('/api/test', {method:'POST', body: JSON.stringify({
+    server: $('server').value.trim(), user: $('user').value.trim(),
+    password: $('password').value
+  })});
+}
+
+$('btnStart').onclick = start;
+$('btnStop').onclick = () => fetch('/api/stop', {method:'POST'});
+$('btnTest').onclick = testConn;
+$('btnTopic').onclick = refreshTopic;
+$('btnTopicClear').onclick = () => { $('topic').value = ''; $('topic').focus(); };
+$('btnUploadAll').onclick = () => {
+  const ids = [...cards.keys()];
+  upload(ids);
+};
+
+boot();
+setInterval(poll, 700);
+poll();
+</script>
+</body>
+</html>

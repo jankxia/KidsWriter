@@ -1,0 +1,13 @@
+# 构建上下文排除项
+输出/
+__pycache__/
+*.pyc
+*.log
+config.json
+config.local.json
+_t_*.py
+_nas.py
+_remote_test.sh
+.git/
+.github/
+compose.yaml

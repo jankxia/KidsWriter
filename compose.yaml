@@ -1,0 +1,12 @@
+services:
+  kidswriter:
+    build: .
+    image: kidswriter:1.1
+    container_name: kidswriter
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /vol1/1000/kidswriter/data:/app/data
+    environment:
+      TZ: Asia/Shanghai
+      KIDSWRITER_PORT: "8122"
