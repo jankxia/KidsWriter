@@ -999,6 +999,39 @@ class Handler(BaseHTTPRequestHandler):
                 "，网盘上的副本没有动" if t.get("upload_done") else ""))
             return self._send(200, {"ok": True, "removed": removed})
 
+        if path == "/api/delete_many":
+            ids = data.get("ids") or []
+            if not isinstance(ids, list) or not ids:
+                return self._send(200, {"ok": False, "msg": "没有选中文章"})
+            removed, skipped = 0, []
+            for raw_id in ids:
+                aid = str(raw_id or "").strip()
+                if not aid or "/" in aid or "\\" in aid:
+                    skipped.append({"id": aid, "msg": "id 不合法"})
+                    continue
+                with LOCK:
+                    t = TASKS.get(aid) or {}
+                if t.get("status") in ("写稿中", "配音中", "上传中", "排队中"):
+                    skipped.append({"id": aid, "msg": "正在%s" % t.get("status")})
+                    continue
+                folder = OUTPUT / aid
+                if not folder.exists() and not t:
+                    skipped.append({"id": aid, "msg": "本地没有这篇"})
+                    continue
+                if folder.exists():
+                    try:
+                        shutil.rmtree(folder)
+                    except Exception as exc:
+                        skipped.append({"id": aid, "msg": "删除失败：%s" % exc})
+                        continue
+                with LOCK:
+                    TASKS.pop(aid, None)
+                    if aid in TASK_ORDER:
+                        TASK_ORDER.remove(aid)
+                removed += 1
+            push("批量删除：清掉 %d 篇本地稿，跳过 %d 篇（网盘副本未动）" % (removed, len(skipped)))
+            return self._send(200, {"ok": True, "removed": removed, "skipped": skipped})
+
         return self._send(404, "not found")
 
     def _opts(self, data):

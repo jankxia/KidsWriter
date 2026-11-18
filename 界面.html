@@ -89,6 +89,15 @@ main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-heigh
 }
 .tasks-head b { color: #d9633a; }
 .tasks-head .spacer { flex: 1 1 auto; }
+.tasks-head .sel-all {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none;
+  font-size: 12.5px; color: #8a8172;
+}
+.tasks-head .sel-all input { width: 15px; height: 15px; accent-color: #ff7a45; cursor: pointer; }
+.btn-mini.danger { border-color: #efb5ae; background: #fff5f4; color: #c9463c; }
+.btn-mini.danger:hover { background: #ffe8e5; }
+.t-sel { flex: 0 0 auto; width: 16px; height: 16px; accent-color: #ff7a45; cursor: pointer; align-self: center; }
+.t-sel:disabled { opacity: .3; cursor: default; }
 .btn-mini {
   height: 30px; padding: 0 14px; border-radius: 8px; border: 1px solid #ffb08c;
   background: #fff7f2; color: #d9633a; font-size: 12.5px; cursor: pointer; font-family: inherit;
@@ -201,8 +210,10 @@ footer .dot.ok { background: #4fa96b; }
 
   <div class="col-right">
     <div class="tasks-head">
+      <label class="sel-all"><input type="checkbox" id="selAll">全选</label>
       <span id="taskSummary">还没有文章</span>
       <div class="spacer"></div>
+      <button class="btn-mini danger" id="btnDelSel" disabled>删除选中</button>
       <button class="btn-mini" id="btnUploadAll" disabled>全部上传</button>
     </div>
     <div class="tasks" id="taskList"><div class="t-empty">点「开始生成」，这里会一篇一篇出现进度。</div></div>
@@ -225,6 +236,9 @@ const GRADES = ["小学一年级","小学二年级","小学三年级","小学四
 const $ = id => document.getElementById(id);
 let cursor = 0, logCount = 0, running = false;
 const cards = new Map();
+const selected = new Set();          // 勾选的待删除篇目
+let taskRows = [];                   // 最近一次拉到任务列表
+const BUSY = ['写稿中', '配音中', '上传中', '排队中'];
 
 function fillGrades() {
   $('grade').innerHTML = GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
@@ -267,6 +281,7 @@ function makeCard(t) {
   el.className = 'task';
   el.innerHTML = `
     <div class="t-top">
+      <input type="checkbox" class="t-sel" title="勾选后可批量删除">
       <span class="t-title"></span>
       <span class="t-meta"></span>
       <div class="spacer"></div>
@@ -280,6 +295,10 @@ function makeCard(t) {
     </div>`;
   el.querySelector('.t-up').onclick = () => upload([t.id]);
   el.querySelector('.t-del').onclick = () => dropOne(t.id);
+  el.querySelector('.t-sel').onchange = e => {
+    if (e.target.checked) selected.add(t.id); else selected.delete(t.id);
+    syncSelection();
+  };
   return el;
 }
 
@@ -305,8 +324,12 @@ function updateCard(el, t) {
   el.querySelector('.t-step').textContent = t.step || '';
   const up = el.querySelector('.t-up');
   const del = el.querySelector('.t-del');
-  const busy = ['写稿中', '配音中', '上传中', '排队中'].indexOf(t.status) >= 0;
+  const busy = BUSY.indexOf(t.status) >= 0;
   del.disabled = busy;
+  const sel = el.querySelector('.t-sel');
+  sel.disabled = busy;
+  sel.checked = !busy && selected.has(t.id);
+  sel.title = busy ? '正在' + t.status + '，不能删' : '勾选后可批量删除';
   if (t.upload_done) {
     up.disabled = true; up.textContent = '已上传'; up.className = 't-up gray';
   } else if (t.ready) {
@@ -320,8 +343,11 @@ function updateCard(el, t) {
 
 function renderTasks(tasks) {
   const list = $('taskList');
+  taskRows = tasks;
   if (!tasks.length) {
     if (!cards.size) list.innerHTML = '<div class="t-empty">点「开始生成」，这里会一篇一篇出现进度。</div>';
+    [...selected].forEach(id => selected.delete(id));
+    syncSelection();
     return;
   }
   const empty = list.querySelector('.t-empty');
@@ -339,6 +365,23 @@ function renderTasks(tasks) {
   if (upN) sum.push(`已上传 ${upN} 篇`);
   $('taskSummary').innerHTML = sum.length ? sum.join(' · ') : '还没有文章';
   $('btnUploadAll').disabled = readyN === 0;
+  syncSelection();
+}
+
+/** 勾选状态与「全选 / 删除选中」按钮同步；正在生成的篇目不可选。 */
+function selectableIds() {
+  return taskRows.filter(t => BUSY.indexOf(t.status) < 0).map(t => t.id);
+}
+
+function syncSelection() {
+  const all = $('selAll');
+  const btn = $('btnDelSel');
+  const pick = selectableIds();
+  btn.disabled = selected.size === 0;
+  btn.textContent = selected.size ? `删除选中 ${selected.size}` : '删除选中';
+  all.disabled = pick.length === 0;
+  all.checked = pick.length > 0 && pick.every(id => selected.has(id));
+  all.indeterminate = selected.size > 0 && !all.checked;
 }
 
 async function poll() {
@@ -397,6 +440,29 @@ async function dropOne(id) {
   await poll();
 }
 
+async function dropSelected() {
+  const ids = [...selected].filter(id => {
+    const t = taskRows.find(x => x.id === id);
+    return !t || BUSY.indexOf(t.status) < 0;
+  });
+  if (!ids.length) { alert('选中的文章都在生成中，等它们停下来再删'); return; }
+  if (!confirm(`删除选中的 ${ids.length} 篇本地稿？已上传到网盘的副本不受影响。`)) return;
+  const r = await (await fetch('/api/delete_many', {method:'POST', body: JSON.stringify({ids})})).json();
+  if (!r.ok) { alert(r.msg || '删除失败'); return; }
+  for (const id of ids) {
+    const el = cards.get(id);
+    if (el) el.remove();
+    cards.delete(id);
+    selected.delete(id);
+  }
+  const skipped = (r.skipped || []);
+  if (skipped.length) {
+    alert(`已删 ${r.removed || 0} 篇，跳过 ${skipped.length} 篇：` +
+      skipped.map(s => s.id + ' ' + (s.msg || '')).join('；'));
+  }
+  await poll();
+}
+
 async function testConn() {
   await fetch('/api/test', {method:'POST', body: JSON.stringify({
     server: $('server').value.trim(), user: $('user').value.trim(),
@@ -412,6 +478,13 @@ $('btnTopicClear').onclick = () => { $('topic').value = ''; $('topic').focus(); 
 $('btnUploadAll').onclick = () => {
   const ids = [...cards.keys()];
   upload(ids);
+};
+$('btnDelSel').onclick = dropSelected;
+$('selAll').onchange = e => {
+  const pick = selectableIds();
+  if (e.target.checked) pick.forEach(id => selected.add(id));
+  else selected.clear();
+  syncSelection();
 };
 
 boot();
