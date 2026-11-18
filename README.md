@@ -35,24 +35,32 @@
 # compose.yaml
 services:
   kidswriter:
-    build: .
-    image: kidswriter:1.1
+    image: ghcr.io/jankxia/kidswriter:v1.1
+    # build: .                  # 想从源码构建就换成这行
     container_name: kidswriter
     restart: unless-stopped
-    network_mode: host          # 若 NAS 的 docker 网段用尽，用 host 模式最省事
+    ports:
+      - "8122:8122"             # 有端口映射，飞牛容器列表里端口可以直接点开
     volumes:
       - /vol1/1000/kidswriter/data:/app/data
     environment:
       TZ: Asia/Shanghai
       KIDSWRITER_PORT: "8122"
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24 # 这台机器默认地址池已被占满，必须显式给子网
 ```
 
 ```bash
-docker compose up -d --build
-# 或直接用发布好的镜像
+docker compose up -d
+# 或者一条命令，注意也要给子网，否则 bridge 创建会失败
 docker run -d --name kidswriter --restart unless-stopped \
-  --network host -v /你的目录/data:/app/data \
-  ghcr.io/jankxia/KidsWriter:latest
+  -p 8122:8122 -v /你的目录/data:/app/data \
+  ghcr.io/jankxia/kidswriter:v1.1
 ```
 
 数据都在 `data/`：`config.json` 和 `输出/<文章id>/`。容器重启后没上传的稿子会自动回到「待上传」，不会丢。
