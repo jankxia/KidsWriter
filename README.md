@@ -15,6 +15,7 @@
 - **配音**：edge-tts 逐句合成 `001.mp3…`，音色、语速、并发都可配。
 - **配封面**：按标题关键词从 `covers/` 的图池里挑，命中不了才按 id 哈希兜底。
 - **手动上传**：生成完停在「待上传」，你确认标题、字数、句数、封面无误后再点上传；顺序是建目录 → mp3 → cover → **最后**写 json，电视端不会扫到半成品。
+- **批量清理**：列表每篇带勾选框，配合「全选」和「删除选中 N」一次性清掉本地旧稿；正在写稿、配音、上传、排队的篇目会自动禁选，删除时也会跳过并在日志里说明原因。删的是 NAS 本地目录，网盘上已上传的副本不受影响。
 
 生成过程中卡片和日志都实时显示阶段：
 
@@ -35,7 +36,7 @@
 # compose.yaml
 services:
   kidswriter:
-    image: ghcr.io/jankxia/kidswriter:v1.1
+    image: ghcr.io/jankxia/kidswriter:v1.4
     # build: .                  # 想从源码构建就换成这行
     container_name: kidswriter
     restart: unless-stopped
@@ -60,7 +61,7 @@ docker compose up -d
 # 或者一条命令，注意也要给子网，否则 bridge 创建会失败
 docker run -d --name kidswriter --restart unless-stopped \
   -p 8122:8122 -v /你的目录/data:/app/data \
-  ghcr.io/jankxia/kidswriter:v1.1
+  ghcr.io/jankxia/kidswriter:v1.4
 ```
 
 数据都在 `data/`：`config.json` 和 `输出/<文章id>/`。容器重启后没上传的稿子会自动回到「待上传」，不会丢。
@@ -97,6 +98,7 @@ docker run -d --name kidswriter --restart unless-stopped \
 
 ## 版本
 
+- `v1.4`：列表加勾选框与「全选 / 删除选中 N」批量删除，新增 `POST /api/delete_many {"ids":[...]}`（返回 `removed` 与 `skipped` 明细）；正在生成的篇目禁选、跳过并在日志说明。
 - `v1.3`：给电视端开接口——`POST /api/start` 直接返回本批文章 id，新增 `GET /api/tasks`（精简任务列表，不带日志），电视可以下发完就走、由 NAS 后台继续写。
 - `v1.2`：小学文章逐字注音（tokens + 声调 + 变调），Docker 镜像内置 pypinyin。
 - `v1.1`：分阶段状态与进度、随机主题可刷新、生成完手动上传、Docker 镜像、重启不丢稿、可删除本地稿。
