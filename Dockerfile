@@ -9,9 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir "edge-tts==7.3.1" \
+RUN pip install --no-cache-dir "edge-tts==7.3.1" "pypinyin==0.55.0" \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
-    || pip install --no-cache-dir "edge-tts==7.3.1"
+    || pip install --no-cache-dir "edge-tts==7.3.1" "pypinyin==0.55.0"
 
 COPY 童阅写稿器.py /app/writer.py
 COPY 界面.html /app/index.html

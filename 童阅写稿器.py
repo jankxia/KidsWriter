@@ -233,6 +233,33 @@ def split_sentences(text):
     return [s for s in out if re.search(r"[A-Za-z0-9\u4e00-\u9fff]", s)]
 
 
+def pinyin_tokens(text):
+    """小学文章逐字注音，返回 [{"h": 字, "p": 拼音}]，标点拼音留空。
+
+    整句交给 pypinyin 才会做「一 / 不」变调和轻声（一个→yí gè、一起→yì qǐ），
+    拆成单字逐个查会退回本调。库没收录的生僻字只留汉字、拼音空着，
+    电视端照常显示这一格，不会整句塌掉。
+    """
+    try:
+        from pypinyin import lazy_pinyin, Style
+    except Exception:
+        return []
+    t = (text or "").strip()
+    if not t:
+        return []
+    han = re.compile(r"^[\u4e00-\u9fff]$")
+    ps = lazy_pinyin(t, style=Style.TONE)
+    if len(ps) != len(t):
+        ps = [lazy_pinyin(ch, style=Style.TONE)[0] if han.match(ch) else ch for ch in t]
+    out = []
+    for i, ch in enumerate(t):
+        p = ps[i] if i < len(ps) else ""
+        if not han.match(ch) or p == ch:
+            p = ""
+        out.append({"h": ch, "p": p})
+    return out
+
+
 def count_chars(text):
     return len(re.sub(r"\s", "", text or ""))
 
@@ -612,21 +639,34 @@ def gen_one(cfg, grade, chars, topic, aid, titles, opts, log, stop):
     else:
         log("  跳过配音（未勾选或已停止）")
 
+    # 小学一到六年级必须逐字注音，中学和名著不注
+    is_primary = str(grade).startswith("小学")
+    sent_list = []
+    for i, s in enumerate(sents):
+        d = {"text": s, "pinyin": "", "image": "",
+             "audio": "/%s/%s/%03d.mp3" % (cfg["root"], aid, i + 1)}
+        if is_primary:
+            toks = pinyin_tokens(s)
+            if toks:
+                d["tokens"] = toks
+        sent_list.append(d)
+    if is_primary:
+        got = [d for d in sent_list if d.get("tokens")]
+        log("  拼音 %d/%d 句（逐字带声调）" % (len(got), len(sents)))
+        if len(got) < len(sents):
+            log("  有 %d 句没取到拼音，检查 pypinyin 是否装好" % (len(sents) - len(got)))
+
     payload = {
         "id": aid,
         "title": title,
         "category": grade,
         "body": body,
         "autoChecked": True,
-        "autoCheckNote": "电脑写稿器生成",
+        "autoCheckNote": "电脑写稿器生成" + ("（小学已逐字注音）" if is_primary else ""),
         "manualChecked": False,
         "cover": "/%s/%s/cover.jpg" % (cfg["root"], aid) if cover else "",
         "maxChars": count_chars(body),
-        "sentences": [
-            {"text": s, "pinyin": "", "image": "",
-             "audio": "/%s/%s/%03d.mp3" % (cfg["root"], aid, i + 1)}
-            for i, s in enumerate(sents)
-        ],
+        "sentences": sent_list,
     }
     if cover:
         payload["coverVersion"] = cover.stat().st_size
