@@ -738,7 +738,7 @@ def upload_one(cfg, aid, log):
 
 
 # ---------------------------------------------------------------- 生成批次
-def run_job(cfg, opts, log, stop):
+def run_job(cfg, opts, log, stop, ids=None):
     grade = opts["grade"]
     chars = opts["chars"]
     count = opts["count"]
@@ -779,7 +779,8 @@ def run_job(cfg, opts, log, stop):
         else:
             pool = [t for t in TOPIC_SAMPLES if t not in titles]
             topic = random.choice(pool) if pool else random.choice(TOPIC_SAMPLES)
-        aid = "gen_%d_%d" % (stamp, i + 1)
+        # 外部（电视端）发起时用调用方预先给的 id，前端才能立刻按 id 盯进度
+        aid = ids[i] if ids and i < len(ids) else "gen_%d_%d" % (stamp, i + 1)
         try:
             r = gen_one(cfg, grade, chars, topic, aid, titles, opts, log, stop)
         except Exception as exc:
@@ -850,6 +851,15 @@ class Handler(BaseHTTPRequestHandler):
                     "total": STATE["base"] + len(STATE["lines"]), "lines": lines,
                     "tasks": task_snapshot(),
                 })
+        if path == "/api/tasks":
+            # 给电视端轮询用的精简接口：只回状态和任务，不带日志文本
+            with LOCK2:
+                return self._send(200, {
+                    "running": STATE["running"], "status": STATE["status"],
+                    "uploading": bool(STATE.get("uploading")),
+                    "seq": STATE["seq"],
+                    "tasks": task_snapshot(),
+                })
         if path == "/api/config":
             cfg = load_config()
             return self._send(200, {
@@ -892,9 +902,12 @@ class Handler(BaseHTTPRequestHandler):
                 STATE.update({"running": True, "lines": [], "seq": 0,
                               "status": "生成中", "stop": stop, "base": 0})
 
+            stamp = int(time.time() * 1000)
+            ids = ["gen_%d_%d" % (stamp, i + 1) for i in range(opts["count"])]
+
             def worker():
                 try:
-                    run_job(cfg, opts, push, stop)
+                    run_job(cfg, opts, push, stop, ids)
                 except Exception as exc:
                     push("出错：%s: %s" % (type(exc).__name__, exc))
                 finally:
@@ -904,7 +917,8 @@ class Handler(BaseHTTPRequestHandler):
                     push("")
 
             threading.Thread(target=worker, daemon=True).start()
-            return self._send(200, {"ok": True})
+            return self._send(200, {"ok": True, "ids": ids, "count": len(ids),
+                                    "grade": opts["grade"]})
 
         if path == "/api/stop":
             with LOCK2:

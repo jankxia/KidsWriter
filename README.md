@@ -97,5 +97,6 @@ docker run -d --name kidswriter --restart unless-stopped \
 
 ## 版本
 
+- `v1.3`：给电视端开接口——`POST /api/start` 直接返回本批文章 id，新增 `GET /api/tasks`（精简任务列表，不带日志），电视可以下发完就走、由 NAS 后台继续写。
 - `v1.2`：小学文章逐字注音（tokens + 声调 + 变调），Docker 镜像内置 pypinyin。
 - `v1.1`：分阶段状态与进度、随机主题可刷新、生成完手动上传、Docker 镜像、重启不丢稿、可删除本地稿。
