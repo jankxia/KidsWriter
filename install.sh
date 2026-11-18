@@ -5,14 +5,15 @@
 #   sh install.sh                    # 交互执行，会提示输入 sudo 密码
 #   SUDO_PASS='你的密码' sh install.sh # 非交互执行
 #   PORT=8123 sh install.sh          # 换端口
-#   IMAGE=ghcr.io/jankxia/kidswriter:latest sh install.sh
+#   SUBNET=172.33.0.0/24 sh install.sh # 换子网（和别的容器冲突时）
 set -e
 
 DIR=${DIR:-/vol1/1000/kidswriter}
 IMAGE=${IMAGE:-ghcr.io/jankxia/kidswriter:v1.1}
 PORT=${PORT:-8122}
+SUBNET=${SUBNET:-172.32.0.0/24}
 
-echo "安装目录 $DIR，镜像 $IMAGE，端口 $PORT"
+echo "安装目录 $DIR，镜像 $IMAGE，端口 $PORT，子网 $SUBNET"
 
 # 预授权 sudo，避免后面每条命令都问密码
 if [ -n "$SUDO_PASS" ]; then
@@ -31,13 +32,20 @@ services:
     image: $IMAGE
     container_name: kidswriter
     restart: unless-stopped
-    # 这台机器 docker 默认网段常被其他容器占满，用 host 模式最省事
-    network_mode: host
+    ports:
+      - "$PORT:8122"
     volumes:
       - $DIR/data:/app/data
     environment:
       TZ: Asia/Shanghai
-      KIDSWRITER_PORT: "$PORT"
+      KIDSWRITER_PORT: "8122"
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: $SUBNET
 EOF
 
 cd "$DIR"
@@ -54,13 +62,13 @@ sleep 8
 
 echo '--- 容器 ---'
 if [ -n "$SUDO_PASS" ]; then
-  echo "$SUDO_PASS" | $SUDO docker ps --filter name=kidswriter --format '{{.Names}} | {{.Status}} | {{.Image}}'
+  echo "$SUDO_PASS" | $SUDO docker ps --filter name=kidswriter --format '{{.Names}} | {{.Status}} | {{.Ports}} | {{.Image}}'
 else
-  sudo docker ps --filter name=kidswriter --format '{{.Names}} | {{.Status}} | {{.Image}}'
+  sudo docker ps --filter name=kidswriter --format '{{.Names}} | {{.Status}} | {{.Ports}} | {{.Image}}'
 fi
 
 echo '--- 服务 ---'
 curl -s -m 8 "http://127.0.0.1:$PORT/api/config"
 echo
-echo "装好了：浏览器打开 http://<NAS的地址>:$PORT"
+echo "装好了：浏览器打开 http://<NAS的地址>:$PORT ，飞牛容器列表里点端口也能直接进"
 echo "数据在 $DIR/data（config.json 和 输出/）"

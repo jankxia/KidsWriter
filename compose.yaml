@@ -5,9 +5,20 @@ services:
     # build: .
     container_name: kidswriter
     restart: unless-stopped
-    network_mode: host
+    # 映射端口，飞牛容器列表里端口可以直接点开
+    ports:
+      - "8122:8122"
     volumes:
       - /vol1/1000/kidswriter/data:/app/data
     environment:
       TZ: Asia/Shanghai
       KIDSWRITER_PORT: "8122"
+
+networks:
+  # 这台机器 docker 默认地址池已被其他容器占满，
+  # 不指定子网会报 all predefined address pools have been fully subnetted
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24
