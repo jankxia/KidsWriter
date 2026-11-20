@@ -496,6 +496,59 @@ def synth_all(jobs, voice, rate, conc, on_progress=None):
     return [r is True for r in results]
 
 
+# ---------------------------------------------------------------- 文章编码（与网盘、APK 共用一套）
+ID_STAGE = {"小学": "X", "初中": "C", "高中": "G"}
+ID_GRADE = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6"}
+
+
+def id_prefix(category):
+    """小学 X1..X6 / 初中 C1..C3 / 高中 G1..G3 / 名著 MZ。"""
+    c = str(category or "").strip()
+    if c.startswith("名著") or c == "世界名著" or c.startswith("世界名著"):
+        return "MZ"
+    stage = c[:2]
+    if stage not in ID_STAGE:
+        return ""
+    return ID_STAGE[stage] + ID_GRADE.get(c[2:3], "")
+
+
+def title_code(title):
+    """标题去掉标点后取最后 3 个字的首字母（汉字取拼音首字母）。"""
+    clean = re.sub(r"[^\u4e00-\u9fffa-zA-Z0-9]", "", title or "")
+    out = ""
+    for ch in clean[-3:]:
+        if "\u4e00" <= ch <= "\u9fff":
+            from pypinyin import Style, lazy_pinyin
+            py = lazy_pinyin(ch, style=Style.FIRST_LETTER)
+            out += py[0][:1].lower() if py and py[0] else ""
+        else:
+            out += ch.lower()
+    return out or "zzz"
+
+
+def encode_id(cfg, category, title, fallback=""):
+    """生成规范文章 id：前缀 + 5 位序号 + 3 位标题码。失败时回退 fallback。"""
+    prefix = id_prefix(category)
+    if not prefix:
+        return fallback
+    seq = 1
+    try:
+        ol = OL(cfg["server"])
+        ol.login(cfg["user"], cfg["password"])
+        base = "/%s/content/ai" % cfg["root"].strip("/")
+        names = [e["name"][:-5] for e in ol.list(base) if e["name"].endswith(".json")]
+        used = []
+        for n in names:
+            if n.startswith(prefix) and len(n) >= len(prefix) + 5:
+                tail = n[len(prefix):len(prefix) + 5]
+                if tail.isdigit():
+                    used.append(int(tail))
+        seq = (max(used) + 1) if used else 1
+    except Exception:
+        seq = 1
+    return "%s%05d%s" % (prefix, seq, title_code(title))
+
+
 # ---------------------------------------------------------------- 任务状态
 TASKS = {}
 TASK_ORDER = []
@@ -525,6 +578,22 @@ def task_set(aid, **kw):
 def task_snapshot():
     with LOCK:
         return [dict(TASKS[a]) for a in TASK_ORDER if a in TASKS]
+
+
+def task_rekey(old, new):
+    """文章正式编码确定后，把任务条目从临时 id 迁到正式 id。"""
+    if old == new:
+        return
+    with LOCK:
+        t = TASKS.pop(old, None)
+        if not t:
+            return
+        t["id"] = new
+        TASKS[new] = t
+        try:
+            TASK_ORDER[TASK_ORDER.index(old)] = new
+        except ValueError:
+            TASK_ORDER.append(new)
 
 
 def boot_scan():
@@ -562,48 +631,54 @@ def boot_scan():
 
 # ---------------------------------------------------------------- 单篇生成
 def gen_one(cfg, grade, chars, topic, aid, titles, opts, log, stop):
-    task_new(aid, grade, topic)
+    task_id = aid
+    task_new(task_id, grade, topic)
     log("")
-    log("=== %s ｜ 主题「%s」｜ 目标 %d 字 ===" % (aid, topic[:24], chars))
-    task_set(aid, status="写稿中", step="生成大纲", progress=0)
+    log("=== %s ｜ 主题「%s」｜ 目标 %d 字 ===" % (task_id, topic[:24], chars))
+    task_set(task_id, status="写稿中", step="生成大纲", progress=0)
 
     title = body = ""
     if opts.get("offline"):
         title, body = offline_article(grade, topic, chars)
         log("  离线模板成稿（未调 AI）")
-        task_set(aid, step="模板拼稿", progress=90)
+        task_set(task_id, step="模板拼稿", progress=90)
     else:
         avoid = "、".join(titles[:30])
         try:
             title, body = write_long(cfg, grade, topic, chars, avoid, log,
-                                     on_step=lambda s, p: task_set(aid, step=s, progress=p))
+                                     on_step=lambda s, p: task_set(task_id, step=s, progress=p))
             if count_chars(body) < chars * 0.8:
                 log("  篇幅只有 %d 字，改为整篇重新生成" % count_chars(body))
-                task_set(aid, step="整篇重写", progress=50)
+                task_set(task_id, step="整篇重写", progress=50)
                 title, body = write_once(cfg, grade, topic, chars, avoid, log)
         except Exception as exc:
             log("  分段生成失败：%s，改为整篇生成" % exc)
             for attempt in range(3):
                 try:
-                    task_set(aid, step="整篇生成 %d/3" % (attempt + 1))
+                    task_set(task_id, step="整篇生成 %d/3" % (attempt + 1))
                     title, body = write_once(cfg, grade, topic, chars, avoid, log)
                     break
                 except Exception as e2:
                     log("  第 %d 次不合法：%s" % (attempt + 1, e2))
                     time.sleep(1)
         if not body:
-            task_set(aid, status="失败", step="写稿失败", error="连续生成失败")
+            task_set(task_id, status="失败", step="写稿失败", error="连续生成失败")
             log("  放弃这一篇：连续生成失败")
             return None
 
     body = ensure_tail(body)
     sents = split_sentences(body)
     if not sents:
-        task_set(aid, status="失败", step="没有可用句子", error="切句为空")
+        task_set(task_id, status="失败", step="没有可用句子", error="切句为空")
         log("  放弃这一篇：正文没有可用句子")
         return None
 
-    task_set(aid, title=title, chars=count_chars(body), sents=len(sents),
+    # 标题已定，按统一规则生成正式文章编码（学段+年级+序号+标题码）
+    aid = encode_id(cfg, grade, title, task_id)
+    log("  文章编码 %s（类别 %s）" % (aid, grade))
+    task_rekey(task_id, aid)
+
+    task_set(task_id, title=title, chars=count_chars(body), sents=len(sents),
              status="配音中", step="准备配音", progress=0)
     log("  成稿《%s》：%d 字，%d 句" % (title, count_chars(body), len(sents)))
 
