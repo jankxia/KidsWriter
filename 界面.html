@@ -321,6 +321,8 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 .reader-head img { width: 120px; height: 120px; border-radius: 12px; object-fit: cover; flex: 0 0 auto; }
 .reader-head .r-title-big { font-size: 22px; font-weight: 700; color: #2b2b2b; }
 .reader-head .r-cat { font-size: 12.5px; color: #a09580; margin-top: 6px; }
+.reader-tools { display: flex; gap: 10px; flex-wrap: wrap; margin: 2px 0 14px; }
+.reader-tools .btn-primary, .reader-tools .btn-ghost { height: 38px; padding: 0 18px; border-radius: 10px; font-size: 14px; }
 .reader-body { display: flex; flex-direction: column; gap: 12px; line-height: 2; }
 #rReader { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #rReader .reader-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -374,7 +376,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.3</span>
+  <span class="ver">v2.4</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1298,6 +1300,7 @@ if (QUIZ.meta) { authFillStage(); authLoad(); }
 
 /* ================= 阅读 ================= */
 const READ = { articles: [], current: null, audio: null,
+  playing: false, cur: 0,
   lastId: localStorage.getItem('reader_last_id') || '' };
 
 function fillReaderGrades() {
@@ -1349,6 +1352,8 @@ async function readerLoadList() {
 }
 
 async function readerOpen(id) {
+  if (READ.audio) { READ.audio.pause(); READ.audio = null; }
+  READ.playing = false; READ.cur = 0;
   const r = await (await fetch('/api/reader/article?id=' + encodeURIComponent(id))).json();
   if (!r.ok) {
     if (await readerCheckUnauth(r)) return;
@@ -1367,6 +1372,16 @@ function renderTokens(tokens, text) {
     : escapeHtml(t.h)).join('');
 }
 
+function firstAudioIndex() {
+  const s = (READ.current && READ.current.sentences) || [];
+  return s.findIndex(x => x.audio);
+}
+
+function updatePlayBtn() {
+  const b = $('btnReaderPlay'); if (!b) return;
+  b.textContent = READ.playing ? '暂停' : (READ.cur > 0 ? '继续' : '开始阅读');
+}
+
 function renderReader() {
   const a = READ.current;
   if (!a) return;
@@ -1383,12 +1398,41 @@ function renderReader() {
         <div class="r-cat">${escapeHtml(a.category)} · ${a.id}</div>
       </div>
     </div>
+    <div class="reader-tools">
+      <button class="btn-primary" id="btnReaderPlay">开始阅读</button>
+      <button class="btn-ghost" id="btnReaderPrev">上一篇</button>
+      <button class="btn-ghost" id="btnReaderNext">下一篇</button>
+    </div>
     <div class="reader-body">${sents}</div>`;
   $('rReader').querySelectorAll('.play').forEach(btn => {
-    btn.onclick = () => playSentence(+btn.dataset.i);
+    btn.onclick = () => { playSentence(+btn.dataset.i); READ.playing = true; updatePlayBtn(); };
   });
-  const first = (a.sentences || []).findIndex(s => s.audio);
-  if (first >= 0) playSentence(first);
+  $('btnReaderPlay').onclick = readerTogglePlay;
+  $('btnReaderPrev').onclick = () => readerStep(-1);
+  $('btnReaderNext').onclick = () => readerStep(1);
+  updatePlayBtn();
+}
+
+function readerTogglePlay() {
+  if (!READ.current) return;
+  if (READ.audio && !READ.audio.paused) {
+    READ.audio.pause(); READ.playing = false; updatePlayBtn(); return;
+  }
+  if (READ.audio) {
+    READ.audio.play().catch(() => {}); READ.playing = true; updatePlayBtn(); return;
+  }
+  const first = firstAudioIndex();
+  READ.cur = first >= 0 ? first : 0;
+  playSentence(READ.cur);
+  READ.playing = true; updatePlayBtn();
+}
+
+function readerStep(dir) {
+  const idx = READ.articles.findIndex(a => a.id === READ.lastId);
+  if (idx < 0) return;
+  const n = idx + dir;
+  if (n < 0 || n >= READ.articles.length) return;
+  readerOpen(READ.articles[n].id);
 }
 
 function playSentence(i) {
@@ -1397,6 +1441,7 @@ function playSentence(i) {
   const sents = a.sentences || [];
   if (i >= sents.length) return;
   if (READ.audio) { READ.audio.pause(); READ.audio = null; }
+  READ.cur = i;
   $('rReader').querySelectorAll('.r-sent').forEach(x => x.classList.toggle('on', +x.dataset.i === i));
   const s = sents[i];
   if (!s || !s.audio) { playSentence(i + 1); return; }
