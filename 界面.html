@@ -381,7 +381,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.9</span>
+  <span class="ver">v2.10</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1208,9 +1208,10 @@ function authRenderGrades() {
     `<option value="${g}">${st.label}${CN_NUM[g - 1]}年级</option>`).join('');
 }
 function authRenderSubjects() {
-  // 加题目页仅维护语文题，学科锁定 chinese
-  const label = (QUIZ.meta.subject_labels || {})['chinese'] || '语文';
-  $('aSubject').innerHTML = `<option value="chinese">${label}</option>`;
+  if (!QUIZ.meta || !QUIZ.meta.stages[authStage()]) return;
+  const st = QUIZ.meta.stages[authStage()];
+  $('aSubject').innerHTML = st.subjects.map(s =>
+    `<option value="${s}">${(QUIZ.meta.subject_labels || {})[s] || s}</option>`).join('');
 }
 function authFileName() { return quizGradeFile(authStage(), +$('aGrade').value); }
 function authLog(msg) {
@@ -1237,9 +1238,9 @@ async function authLoad() {
 function authRender() {
   const list = $('aList');
   list.innerHTML = '';
-  const view = AUTH.questions.filter(q => q.s === 'chinese');
+  const view = AUTH.questions.filter(q => q.s === AUTH.subject);
   if (!view.length) {
-    list.innerHTML = '<div class="t-empty">还没有语文题目，用 AI 生成或手动加入。</div>';
+    list.innerHTML = '<div class="t-empty">该学科还没有题目，用 AI 生成或手动加入。</div>';
   }
   view.forEach((q) => {
     const el = document.createElement('div');
@@ -1322,7 +1323,7 @@ document.querySelectorAll('#page-author textarea').forEach(t => t.addEventListen
 
 $('aStage').onchange = () => { authRenderGrades(); authRenderSubjects(); authLoad(); };
 $('aGrade').onchange = authLoad;
-$('aSubject').onchange = () => { AUTH.subject = $('aSubject').value; };
+$('aSubject').onchange = () => { AUTH.subject = $('aSubject').value; authRender(); };
 $('btnTestAuthor').onclick = authTestConn;
 $('btnAdd').onclick = () => {
   try {
