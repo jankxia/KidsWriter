@@ -662,31 +662,65 @@ def quiz_save_local(name, questions):
     return len(cleaned)
 
 
-def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
-    """调 AI 按 schema 批量出题，返回规范后的题目列表。"""
-    count = max(1, min(20, int(count or 5)))
-    subj = SUBJECT_LABELS.get(subject, subject)
-    stage_label = QUIZ_STAGES[stage]["label"]
-    hint = "围绕%s" % topic if topic.strip() else "适合该年级水平的常见知识点"
-    prompt = (
+def _loads_quiz_array(raw):
+    """宽松解析 AI 返回的题目 JSON 数组：剥离 markdown 围栏、清理裸换行与尾逗号。"""
+    raw = re.sub(r"```(?:json|JSON)?", "", raw or "").strip()
+    m = re.search(r"\[[\s\S]*\]", raw)
+    if not m:
+        raise RuntimeError("AI 没有返回题目数组")
+    text = m.group(0)
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # 去掉对象/数组末尾多余逗号，字符串内裸换行替换为空格
+    fixed = re.sub(r",(\s*[\]}])", r"\1", text)
+    fixed = fixed.replace("\r", " ").replace("\n", " ")
+    try:
+        return json.loads(fixed)
+    except Exception as exc:
+        raise RuntimeError("AI 题目 JSON 解析失败：%s" % exc)
+
+
+def _quiz_prompt(stage_label, grade, subj, n, hint):
+    return (
         "给%s%s的%s出 %d 道单项选择题，%s。\n"
         "只输出 JSON 数组，每题格式："
         "{\"q\":\"题干\",\"o\":[\"选项一\",\"选项二\",\"选项三\",\"选项四\"],\"a\":0,\"l\":1}\n"
         "其中 a 是正确选项序号（0-3），l 是难度 1-5；四个选项都要简短通顺，干扰项要合理。\n"
-        "不要输出解释、不要 markdown。"
-        % (stage_label, grade, subj, count, hint)
+        "题干和选项里如需引用，请用中文引号「」，不要使用英文双引号；不要换行。\n"
+        "不要输出解释、不要 markdown、不要代码块。"
+        % (stage_label, grade, subj, n, hint)
     )
-    raw = ask_ai(cfg, prompt, max_tokens=max(800, count * 300),
-                 system="你是中小学命题老师，只输出符合格式的 JSON 数组。")
-    m = re.search(r"\[[\s\S]*\]", raw or "")
-    if not m:
-        raise RuntimeError("AI 没有返回题目数组")
-    arr = json.loads(m.group(0))
-    out = []
-    for i, q in enumerate(arr[:count]):
-        nq = quiz_normalize(q, stage, grade, subject, i)
-        nq["id"] = quiz_next_id(out, stage, grade, subject)
-        out.append(nq)
+
+
+def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
+    """分批调 AI 出题并规范成题目列表；每批少量、失败重试，降低长输出破损概率。"""
+    count = max(1, min(20, int(count or 5)))
+    subj = SUBJECT_LABELS.get(subject, subject)
+    stage_label = QUIZ_STAGES[stage]["label"]
+    hint = "围绕%s" % topic if topic.strip() else "适合该年级水平的常见知识点"
+    system = "你是中小学命题老师，只输出符合格式的 JSON 数组。"
+    out, remaining, batch = [], count, 20
+    while remaining > 0:
+        n = min(batch, remaining)
+        prompt = _quiz_prompt(stage_label, grade, subj, n, hint)
+        arr, last_exc = None, None
+        for attempt in range(2):
+            raw = ask_ai(cfg, prompt, max_tokens=max(600, n * 300), system=system)
+            try:
+                arr = _loads_quiz_array(raw)
+                break
+            except Exception as exc:
+                last_exc = exc
+                time.sleep(1.0)
+        if arr is None:
+            raise RuntimeError("AI 题目生成失败：%s" % last_exc)
+        for q in arr[:n]:
+            nq = quiz_normalize(q, stage, grade, subject, len(out))
+            nq["id"] = quiz_next_id(out, stage, grade, subject)
+            out.append(nq)
+        remaining -= n
     errors = quiz_validate(out, stage, grade, subject)
     if errors:
         raise RuntimeError("AI 题目校验未通过：" + "；".join(errors[:5]))

@@ -9,7 +9,7 @@
 set -e
 
 DIR=${DIR:-/vol1/1000/kidswriter}
-IMAGE=${IMAGE:-ghcr.io/jankxia/kidswriter:v2.10}
+IMAGE=${IMAGE:-ghcr.io/jankxia/kidswriter:v2.11}
 PORT=${PORT:-8122}
 SUBNET=${SUBNET:-172.32.0.0/24}
 
