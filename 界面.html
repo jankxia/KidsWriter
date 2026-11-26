@@ -1382,6 +1382,26 @@ function updatePlayBtn() {
   b.textContent = READ.playing ? '暂停' : (READ.cur > 0 ? '继续' : '开始阅读');
 }
 
+function refreshSentBtns() {
+  $('rReader').querySelectorAll('.r-sent').forEach(x => {
+    const btn = x.querySelector('.play'); if (!btn) return;
+    const i = +x.dataset.i;
+    const active = i === READ.cur && READ.audio;
+    btn.textContent = (active && !READ.audio.paused) ? '⏸' : '▶';
+  });
+}
+
+function sentenceToggle(i) {
+  if (!READ.current) return;
+  if (READ.cur === i && READ.audio) {
+    if (!READ.audio.paused) { READ.audio.pause(); READ.playing = false; }
+    else { READ.audio.play().catch(() => {}); READ.playing = true; }
+    updatePlayBtn(); refreshSentBtns(); return;
+  }
+  playSentence(i); READ.playing = true;
+  updatePlayBtn(); refreshSentBtns();
+}
+
 function renderReader() {
   const a = READ.current;
   if (!a) return;
@@ -1405,7 +1425,7 @@ function renderReader() {
     </div>
     <div class="reader-body">${sents}</div>`;
   $('rReader').querySelectorAll('.play').forEach(btn => {
-    btn.onclick = () => { playSentence(+btn.dataset.i); READ.playing = true; updatePlayBtn(); };
+    btn.onclick = () => sentenceToggle(+btn.dataset.i);
   });
   $('btnReaderPlay').onclick = readerTogglePlay;
   $('btnReaderPrev').onclick = () => readerStep(-1);
@@ -1416,10 +1436,10 @@ function renderReader() {
 function readerTogglePlay() {
   if (!READ.current) return;
   if (READ.audio && !READ.audio.paused) {
-    READ.audio.pause(); READ.playing = false; updatePlayBtn(); return;
+    READ.audio.pause(); READ.playing = false; updatePlayBtn(); refreshSentBtns(); return;
   }
   if (READ.audio) {
-    READ.audio.play().catch(() => {}); READ.playing = true; updatePlayBtn(); return;
+    READ.audio.play().catch(() => {}); READ.playing = true; updatePlayBtn(); refreshSentBtns(); return;
   }
   const first = firstAudioIndex();
   READ.cur = first >= 0 ? first : 0;
@@ -1443,6 +1463,9 @@ function playSentence(i) {
   if (READ.audio) { READ.audio.pause(); READ.audio = null; }
   READ.cur = i;
   $('rReader').querySelectorAll('.r-sent').forEach(x => x.classList.toggle('on', +x.dataset.i === i));
+  refreshSentBtns();
+  const onEl = $('rReader').querySelector('.r-sent.on');
+  if (onEl) onEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
   const s = sents[i];
   if (!s || !s.audio) { playSentence(i + 1); return; }
   const proxied = "/api/reader/audio?id=" + encodeURIComponent(a.id) + "&i=" + i;
