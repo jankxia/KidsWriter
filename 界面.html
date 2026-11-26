@@ -381,7 +381,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.8</span>
+  <span class="ver">v2.9</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1414,7 +1414,6 @@ async function readerOpen(id) {
   }
   READ.current = r.article; READ.lastId = id;
   localStorage.setItem('reader_last_id', id);
-  markRead(id);
   const readSet = new Set(readIds());
   document.querySelectorAll('.r-item').forEach(x => {
     x.classList.toggle('on', x.dataset.id === id);
@@ -1518,6 +1517,19 @@ function readerStep(dir) {
   readerOpen(READ.articles[n].id);
 }
 
+function markReadCurrent() {
+  if (!READ.lastId) return;
+  markRead(READ.lastId);
+  const readSet = new Set(readIds());
+  document.querySelectorAll('.r-item').forEach(x => {
+    const tag = x.querySelector('.r-tag');
+    if (!tag) return;
+    const rd = readSet.has(x.dataset.id);
+    tag.className = 'r-tag' + (rd ? ' read' : ' empty');
+    tag.textContent = rd ? '已读' : '';
+  });
+}
+
 function playSentence(i) {
   const a = READ.current;
   if (!a) return;
@@ -1536,6 +1548,7 @@ function playSentence(i) {
   READ.audio = au;
   au.onended = () => playSentence(i + 1);
   au.play().catch(() => {});
+  markReadCurrent();
 }
 
 $('rGrade').onchange = readerLoadList;
