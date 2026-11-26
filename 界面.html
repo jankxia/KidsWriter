@@ -312,11 +312,16 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 
 /* ---- 阅读 ---- */
 .r-item { background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer;
-  box-shadow: 0 1px 3px rgba(90, 76, 50, .06); border-left: 3px solid #eee6d8; }
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .06); border-left: 3px solid #eee6d8;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .r-item:hover { border-left-color: #ff7a45; }
 .r-item.on { border-left-color: #ff7a45; background: #fff7f2; }
+.r-item .r-main { flex: 1 1 auto; min-width: 0; }
 .r-item .r-title { font-size: 14px; font-weight: 600; color: #2b2b2b; }
 .r-item .r-meta { font-size: 12px; color: #a09580; margin-top: 4px; }
+.r-tag { flex: 0 0 auto; font-size: 11px; border-radius: 8px; padding: 3px 10px; white-space: nowrap; }
+.r-tag.read { color: #5f8a4f; background: #eef5ea; }
+.r-tag.empty { color: #d8d0c0; background: transparent; }
 .reader-head { display: flex; gap: 16px; align-items: flex-start; }
 .reader-head img { width: 120px; height: 120px; border-radius: 12px; object-fit: cover; flex: 0 0 auto; }
 .reader-head .r-title-big { font-size: 22px; font-weight: 700; color: #2b2b2b; }
@@ -376,7 +381,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.4</span>
+  <span class="ver">v2.5</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -660,6 +665,7 @@ function switchPage(page) {
   if (!ME.pages.includes(page)) page = ME.pages[0];
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   ALL_PAGES.forEach(p => { $('page-' + p).hidden = p !== page; });
+  if (page === 'reader' && ME.pages.includes('reader') && typeof readerLoadList === 'function') readerLoadList();
 }
 
 async function doLogin() {
@@ -1303,6 +1309,15 @@ const READ = { articles: [], current: null, audio: null,
   playing: false, cur: 0,
   lastId: localStorage.getItem('reader_last_id') || '' };
 
+function readIds() {
+  try { return JSON.parse(localStorage.getItem('reader_read_ids') || '[]'); }
+  catch (e) { return []; }
+}
+function markRead(id) {
+  const s = new Set(readIds()); s.add(id);
+  localStorage.setItem('reader_read_ids', JSON.stringify([...s]));
+}
+
 function fillReaderGrades() {
   $('rGrade').innerHTML = '<option value="">全部</option>' +
     GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
@@ -1335,17 +1350,21 @@ async function readerLoadList() {
     READ.articles = r.articles || [];
     if (!READ.articles.length) { list.innerHTML = '<div class="t-empty">网盘上还没有文章。</div>'; return; }
     list.innerHTML = '';
+    const read = new Set(readIds());
     READ.articles.forEach(a => {
       const el = document.createElement('div');
       el.className = 'r-item'; el.dataset.id = a.id;
       if (a.id === READ.lastId) el.classList.add('on');
-      el.innerHTML = `<div class="r-title">${escapeHtml(a.title || a.id)}</div>
-        <div class="r-meta">${escapeHtml(a.category)} · ${a.chars} 字 · ${a.sents} 句</div>`;
+      const tag = read.has(a.id)
+        ? '<span class="r-tag read">已读</span>' : '<span class="r-tag empty"></span>';
+      el.innerHTML = `<div class="r-main">
+          <div class="r-title">${escapeHtml(a.title || a.id)}</div>
+          <div class="r-meta">${escapeHtml(a.category)} · ${a.chars} 字 · ${a.sents} 句</div>
+        </div>${tag}`;
       el.onclick = () => readerOpen(a.id);
       list.appendChild(el);
     });
-    const last = READ.articles.find(a => a.id === READ.lastId);
-    if (last) readerOpen(last.id);
+    if (READ.lastId) readerOpen(READ.lastId);
   } catch (e) {
     list.innerHTML = `<div class="t-empty">连接失败：${escapeHtml(e.message)}</div>`;
   } finally { setReaderBusy(false); }
@@ -1361,7 +1380,12 @@ async function readerOpen(id) {
   }
   READ.current = r.article; READ.lastId = id;
   localStorage.setItem('reader_last_id', id);
-  document.querySelectorAll('.r-item').forEach(x => x.classList.toggle('on', x.dataset.id === id));
+  markRead(id);
+  document.querySelectorAll('.r-item').forEach(x => {
+    x.classList.toggle('on', x.dataset.id === id);
+    const tag = x.querySelector('.r-tag');
+    if (tag) { tag.className = 'r-tag' + (x.dataset.id === id ? ' read' : ' empty'); tag.textContent = x.dataset.id === id ? '已读' : ''; }
+  });
   renderReader();
 }
 
