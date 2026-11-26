@@ -1511,8 +1511,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---- 鉴权 ----
     ADMIN_GET = {"/api/state", "/api/tasks", "/api/quiz/edits"}
     ADMIN_POST = {"/api/start", "/api/stop", "/api/upload", "/api/test",
-                  "/api/delete", "/api/delete_many", "/api/quiz/ai",
-                  "/api/quiz/save", "/api/quiz/upload"}
+                  "/api/test/conn", "/api/delete", "/api/delete_many",
+                  "/api/quiz/ai", "/api/quiz/save", "/api/quiz/upload"}
     # 登录即可（管理员、一般账户都能访问）的答题/阅读接口
     USER_GET = {"/api/quiz/manifest", "/api/quiz/file", "/api/quiz/edit",
                 "/api/reader/articles", "/api/reader/article"}
@@ -1811,6 +1811,20 @@ class Handler(BaseHTTPRequestHandler):
                     push("连接失败：%s" % exc)
             threading.Thread(target=job, daemon=True).start()
             return self._send(200, {"ok": True})
+
+        if path == "/api/test/conn":
+            cfg = load_config()
+            server = (data.get("server") or cfg["server"]).strip()
+            user = (data.get("user") or "admin").strip()
+            password = data.get("password") or cfg["password"]
+            try:
+                o = OL(server)
+                o.login(user, password)
+                root = "/" + (data.get("root") or cfg.get("root", "夸克/KidsReader")).strip("/")
+                n = len(o.list(root + "/content/ai"))
+                return self._send(200, {"ok": True, "msg": "连接成功，文章目录现有 %d 篇" % n})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
 
         if path == "/api/delete":
             aid = (data.get("id") or "").strip()

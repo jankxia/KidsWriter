@@ -63,6 +63,24 @@ main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-heigh
 .col-left { flex: 0 0 336px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
 .col-right { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 
+/* 左侧栏折叠 */
+.col-left, .quiz-side { transition: flex-basis .2s ease, flex-basis .2s ease, min-width .2s ease; }
+body.side-hidden .col-left, body.side-hidden .quiz-side { display: none; }
+#sideToggle {
+  position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 64px; border: 1px solid #e6e0d4; border-left: none;
+  border-radius: 0 10px 10px 0; background: #fff; color: #8a8172; cursor: pointer;
+  font-size: 13px; display: flex; align-items: center; justify-content: center; z-index: 80;
+  box-shadow: 1px 2px 6px rgba(90,76,50,.1);
+}
+#sideToggle:hover { color: #d9633a; border-color: #ffb08c; }
+body.side-hidden #sideToggle { left: 0; border-left: 1px solid #e6e0d4; border-right: none; border-radius: 10px 0 0 10px; }
+@media (max-width: 768px) {
+  .col-left, .quiz-side { flex-basis: 280px; }
+  body:not(.side-hidden) .col-left, body:not(.side-hidden) .quiz-side {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 70; background: #f7f4ec; padding: 12px; box-shadow: 2px 0 12px rgba(0,0,0,.15); }
+}
+
 .card {
   background: #fff; border-radius: 14px; padding: 16px 18px;
   box-shadow: 0 1px 3px rgba(90, 76, 50, .07);
@@ -274,6 +292,24 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
   background: #fff; color: #a09580; font-size: 12px; cursor: pointer; font-family: inherit; }
 .q-row .q-del:hover { border-color: #d9534f; color: #d9534f; }
 
+/* 网盘连接状态点 */
+.conn-state { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #8a8172; margin-top: 8px; min-height: 18px; }
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; background: #c9c0ae; flex: 0 0 auto; }
+.conn-dot.ok { background: #4fa96b; box-shadow: 0 0 0 3px rgba(79,169,107,.16); }
+.conn-dot.no { background: #d9534f; box-shadow: 0 0 0 3px rgba(217,83,79,.16); }
+
+/* 出题/手动表单自适应文本框 */
+.field textarea {
+  flex: 1 1 auto; min-width: 0; min-height: 34px; padding: 8px 10px;
+  border: 1px solid #e6e0d4; border-radius: 8px; background: #fdfcf9;
+  font-size: 13px; line-height: 1.55; font-family: inherit; color: #2b2b2b;
+  outline: none; resize: vertical; word-break: break-word; white-space: pre-wrap;
+}
+.field textarea:focus { border-color: #ffb08c; background: #fff; }
+.field textarea::placeholder { color: #c2b9a8; }
+.opt-list { display: flex; flex-direction: column; gap: 9px; }
+.opt-list .field { margin-bottom: 0; }
+
 /* ---- 阅读 ---- */
 .r-item { background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer;
   box-shadow: 0 1px 3px rgba(90, 76, 50, .06); border-left: 3px solid #eee6d8; }
@@ -293,6 +329,10 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 .r-sent ruby { margin: 0 1px; }
 .r-sent rt { font-size: 10px; color: #9a917f; }
 .reader-body ruby rt { font-size: 10px; }
+.r-sent.on { background: #fff7f2; border-radius: 10px; padding: 6px 8px; }
+.reader-bar { height: 4px; background: #f2ecdf; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.reader-bar i { display: block; height: 100%; width: 40%; border-radius: 3px; background: #ff7a45; animation: readerSlide 1.1s ease-in-out infinite; }
+@keyframes readerSlide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
 
 footer { flex: 0 0 auto; padding: 4px 28px 14px; font-size: 12px; color: #a09580;
   display: flex; align-items: center; gap: 8px; }
@@ -332,7 +372,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.0</span>
+  <span class="ver">v2.1</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -341,10 +381,12 @@ footer .dot.ok { background: #4fa96b; }
   </span>
 </header>
 
+<button id="sideToggle" title="收起/展开侧栏">‹</button>
+
 <nav class="tabs">
   <button class="tab-btn active" data-page="writer">写稿器</button>
-  <button class="tab-btn" data-page="quiz">答题库</button>
   <button class="tab-btn" data-page="author">加题目</button>
+  <button class="tab-btn" data-page="quiz">答题库</button>
   <button class="tab-btn" data-page="reader">阅读</button>
 </nav>
 
@@ -446,16 +488,23 @@ footer .dot.ok { background: #4fa96b; }
 <div class="quiz-main">
   <div class="quiz-side">
     <div class="card">
+      <h2>网盘</h2>
+      <div class="field"><label>服务器</label><input id="aServer" placeholder="https://list.717611.xyz"></div>
+      <div class="field"><label>账号</label><input id="aUser" placeholder="admin"></div>
+      <div class="field"><label>密码</label><input id="aPassword" type="password"></div>
+      <button class="btn-ghost" style="width:100%;height:34px;margin-top:4px" id="btnTestAuthor">测试连接</button>
+      <div class="conn-state"><span class="conn-dot" id="aConnDot"></span><span id="aConnMsg">未测试</span></div>
+    </div>
+    <div class="card">
       <h2>出题设置</h2>
       <div class="field"><label>学段</label><select id="aStage"></select></div>
       <div class="field"><label>年级</label><select id="aGrade"></select></div>
       <div class="field"><label>学科</label><select id="aSubject"></select></div>
       <div class="field"><label>题数</label>
         <select id="aAiCount">
-          <option value="5">5 题</option>
-          <option value="10" selected>10 题</option>
-          <option value="15">15 题</option>
-          <option value="20">20 题</option>
+          <option value="100" selected>100 题</option>
+          <option value="500">500 题</option>
+          <option value="1000">1000 题</option>
         </select>
       </div>
       <div class="field" style="align-items:flex-start"><label style="padding-top:9px">知识点</label>
@@ -470,14 +519,14 @@ footer .dot.ok { background: #4fa96b; }
     </div>
     <div class="card">
       <h2>手动加一题</h2>
-      <div class="field"><label>题干</label><input id="aQ" placeholder="输入题目"></div>
-      <div class="row2">
-        <div class="field"><label>选项1</label><input id="aO1"></div>
-        <div class="field"><label>选项2</label><input id="aO2"></div>
+      <div class="field" style="align-items:flex-start"><label style="padding-top:8px">题干</label>
+        <textarea id="aQ" rows="2" placeholder="输入题目"></textarea>
       </div>
-      <div class="row2">
-        <div class="field"><label>选项3</label><input id="aO3"></div>
-        <div class="field"><label>选项4</label><input id="aO4"></div>
+      <div class="opt-list">
+        <div class="field" style="align-items:flex-start"><label style="padding-top:8px">选项1</label><textarea id="aO1" rows="1" placeholder="选项 A"></textarea></div>
+        <div class="field" style="align-items:flex-start"><label style="padding-top:8px">选项2</label><textarea id="aO2" rows="1" placeholder="选项 B"></textarea></div>
+        <div class="field" style="align-items:flex-start"><label style="padding-top:8px">选项3</label><textarea id="aO3" rows="1" placeholder="选项 C"></textarea></div>
+        <div class="field" style="align-items:flex-start"><label style="padding-top:8px">选项4</label><textarea id="aO4" rows="1" placeholder="选项 D"></textarea></div>
       </div>
       <div class="row2">
         <div class="field"><label>答案</label>
@@ -519,6 +568,7 @@ footer .dot.ok { background: #4fa96b; }
       <div class="actions">
         <button class="btn-ghost" id="btnReloadReader" style="width:100%">刷新列表</button>
       </div>
+      <div class="reader-bar" id="readerBar" hidden><i></i></div>
     </div>
     <div class="tasks" id="rList" style="flex:1 1 auto"><div class="t-empty">网盘上还没有文章。</div></div>
   </div>
@@ -552,7 +602,7 @@ function fillGrades() {
 }
 
 const ME = { username: "", role: "", pages: [] };
-const ALL_PAGES = ["writer", "quiz", "author", "reader"];
+const ALL_PAGES = ["writer", "author", "quiz", "reader"];
 
 async function boot() {
   fillGrades();
@@ -569,6 +619,9 @@ async function loadConfig() {
     if (c.server !== undefined) $('server').value = c.server;
     if (c.user !== undefined) $('user').value = c.user;
     if (c.password !== undefined) $('password').value = c.password;
+    if ($('aServer')) $('aServer').value = c.server || '';
+    if ($('aUser')) $('aUser').value = c.user || '';
+    if ($('aPassword')) $('aPassword').value = c.password || '';
     $('grade').value = c.grade || '小学二年级';
     $('chars').value = c.chars; $('count').value = c.count;
     $('portText').textContent = '服务端口 ' + c.port + ' · 封面图池 ' + c.covers + ' 张';
@@ -929,6 +982,7 @@ async function quizLoadMeta() {
     const total = m.count || m.files.length;
     $('qMeta').textContent = `题库版本 ${m.version || '—'} · 共 ${total} 题 · ${m.files.length} 个年级文件`;
     quizLoadStats();
+    if (document.getElementById('aStage')) { authFillStage(); authLoad(); }
   } catch (e) { $('qMeta').textContent = '题库连接失败：' + e.message; }
 }
 
@@ -1088,13 +1142,20 @@ quizLoadMeta();
 const AUTH = { name: "", questions: [], stage: "primary", grade: 1, subject: "chinese" };
 
 function authStage() { return $('aStage').value; }
+function authFillStage() {
+  if (!QUIZ.meta) return;
+  $('aStage').innerHTML = Object.keys(QUIZ.meta.stages)
+    .map(s => `<option value="${s}">${QUIZ.meta.stages[s].label}</option>`).join('');
+  authRenderGrades(); authRenderSubjects();
+}
 function authRenderGrades() {
+  if (!QUIZ.meta || !QUIZ.meta.stages[authStage()]) return;
   const st = QUIZ.meta.stages[authStage()];
-  const label = st.label;
   $('aGrade').innerHTML = st.grades.map(g =>
-    `<option value="${g}">${label}${CN_NUM[g - 1]}年级</option>`).join('');
+    `<option value="${g}">${st.label}${CN_NUM[g - 1]}年级</option>`).join('');
 }
 function authRenderSubjects() {
+  if (!QUIZ.meta || !QUIZ.meta.stages[authStage()]) return;
   const st = QUIZ.meta.stages[authStage()];
   $('aSubject').innerHTML = st.subjects.map(s =>
     `<option value="${s}">${(QUIZ.meta.subject_labels || {})[s] || s}</option>`).join('');
@@ -1109,6 +1170,7 @@ function authLog(msg) {
 }
 
 async function authLoad() {
+  if (!QUIZ.meta) return;
   AUTH.stage = authStage();
   AUTH.grade = +$('aGrade').value;
   AUTH.subject = $('aSubject').value;
@@ -1153,12 +1215,27 @@ function authCollectForm() {
   const opts = [$('aO1').value.trim(), $('aO2').value.trim(), $('aO3').value.trim(), $('aO4').value.trim()];
   if (!$('aQ').value.trim()) throw '题干不能为空';
   if (opts.some(o => !o)) throw '四个选项都要填完整';
-  return { q: $('aQ').value.trim(), o: opts, a: +$('aAns').value, l: +$('aLevel').value, s: AUTH.subject };
+  return { st: AUTH.stage, g: AUTH.grade, s: AUTH.subject,
+           q: $('aQ').value.trim(), o: opts, a: +$('aAns').value, l: +$('aLevel').value };
 }
 
 function authClearForm() {
-  ['aQ', 'aO1', 'aO2', 'aO3', 'aO4'].forEach(id => $(id).value = '');
+  ['aQ', 'aO1', 'aO2', 'aO3', 'aO4'].forEach(id => { $(id).value = ''; autoGrow($(id)); });
   $('aAns').value = '0'; $('aLevel').value = '1';
+}
+
+async function authTestConn() {
+  const dot = $('aConnDot'), msg = $('aConnMsg'), btn = $('btnTestAuthor');
+  btn.disabled = true; dot.className = 'conn-dot'; msg.textContent = '连接中…';
+  try {
+    const r = await (await fetch('/api/test/conn', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ server: $('aServer').value.trim(), user: $('aUser').value.trim(), password: $('aPassword').value })
+    })).json();
+    if (r.ok) { dot.className = 'conn-dot ok'; msg.textContent = r.msg || '已连接'; }
+    else { dot.className = 'conn-dot no'; msg.textContent = r.msg || '未连接'; }
+  } catch (e) { dot.className = 'conn-dot no'; msg.textContent = '未连接：' + e.message; }
+  btn.disabled = false;
 }
 
 async function authAi() {
@@ -1187,9 +1264,13 @@ async function authUpload() {
   else authLog('上传失败：' + (r.msg || ''));
 }
 
+function autoGrow(el) { if (el) { el.style.height = 'auto'; el.style.height = Math.max(34, el.scrollHeight) + 'px'; } }
+document.querySelectorAll('#page-author textarea').forEach(t => t.addEventListener('input', () => autoGrow(t)));
+
 $('aStage').onchange = () => { authRenderGrades(); authRenderSubjects(); authLoad(); };
 $('aGrade').onchange = authLoad;
 $('aSubject').onchange = () => { AUTH.subject = $('aSubject').value; };
+$('btnTestAuthor').onclick = authTestConn;
 $('btnAdd').onclick = () => {
   try {
     AUTH.questions.push(authCollectForm());
@@ -1202,38 +1283,69 @@ $('btnLoadEdit').onclick = authLoad;
 $('btnSave').onclick = authSave;
 $('btnUpload').onclick = authUpload;
 
+if (QUIZ.meta) { authFillStage(); authLoad(); }
+
 /* ================= 阅读 ================= */
-const READ = { articles: [], current: null, audio: null };
+const READ = { articles: [], current: null, audio: null,
+  lastId: localStorage.getItem('reader_last_id') || '' };
 
 function fillReaderGrades() {
   $('rGrade').innerHTML = '<option value="">全部</option>' +
     GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
 }
 
-async function readerLoadList() {
-  const cat = $('rGrade').value;
-  const r = await (await fetch('/api/reader/articles?category=' + encodeURIComponent(cat))).json();
-  const list = $('rList');
-  if (!r.ok) { list.innerHTML = `<div class="t-empty">加载失败：${escapeHtml(r.msg || '')}</div>`; return; }
-  READ.articles = r.articles || [];
-  if (!READ.articles.length) { list.innerHTML = '<div class="t-empty">网盘上还没有文章。</div>'; return; }
-  list.innerHTML = '';
-  READ.articles.forEach(a => {
-    const el = document.createElement('div');
-    el.className = 'r-item';
-    el.innerHTML = `<div class="r-title">${escapeHtml(a.title || a.id)}</div>
-      <div class="r-meta">${escapeHtml(a.category)} · ${a.chars} 字 · ${a.sents} 句</div>`;
-    el.onclick = () => readerOpen(a.id, el);
-    list.appendChild(el);
-  });
+function setReaderBusy(busy) {
+  $('btnReloadReader').disabled = busy;
+  $('btnReloadReader').textContent = busy ? '刷新中…' : '刷新列表';
+  $('readerBar').hidden = !busy;
 }
 
-async function readerOpen(id, el) {
+async function readerCheckUnauth(r) {
+  if (r.msg && /未登录|请先登录/.test(r.msg)) {
+    const me = await (await fetch('/api/me')).json();
+    if (!me.ok) { showLogin(); return true; }
+  }
+  return false;
+}
+
+async function readerLoadList() {
+  const cat = $('rGrade').value;
+  const list = $('rList');
+  setReaderBusy(true);
+  try {
+    const r = await (await fetch('/api/reader/articles?category=' + encodeURIComponent(cat))).json();
+    if (!r.ok) {
+      if (await readerCheckUnauth(r)) return;
+      list.innerHTML = `<div class="t-empty">加载失败：${escapeHtml(r.msg || '')}</div>`; return;
+    }
+    READ.articles = r.articles || [];
+    if (!READ.articles.length) { list.innerHTML = '<div class="t-empty">网盘上还没有文章。</div>'; return; }
+    list.innerHTML = '';
+    READ.articles.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'r-item'; el.dataset.id = a.id;
+      if (a.id === READ.lastId) el.classList.add('on');
+      el.innerHTML = `<div class="r-title">${escapeHtml(a.title || a.id)}</div>
+        <div class="r-meta">${escapeHtml(a.category)} · ${a.chars} 字 · ${a.sents} 句</div>`;
+      el.onclick = () => readerOpen(a.id);
+      list.appendChild(el);
+    });
+    const last = READ.articles.find(a => a.id === READ.lastId);
+    if (last) readerOpen(last.id);
+  } catch (e) {
+    list.innerHTML = `<div class="t-empty">连接失败：${escapeHtml(e.message)}</div>`;
+  } finally { setReaderBusy(false); }
+}
+
+async function readerOpen(id) {
   const r = await (await fetch('/api/reader/article?id=' + encodeURIComponent(id))).json();
-  if (!r.ok) { $('rReader').innerHTML = `<div class="q-text">打开失败：${escapeHtml(r.msg || '')}</div>`; return; }
-  READ.current = r.article;
-  document.querySelectorAll('.r-item').forEach(x => x.classList.remove('on'));
-  if (el) el.classList.add('on');
+  if (!r.ok) {
+    if (await readerCheckUnauth(r)) return;
+    $('rReader').innerHTML = `<div class="q-text">打开失败：${escapeHtml(r.msg || '')}</div>`; return;
+  }
+  READ.current = r.article; READ.lastId = id;
+  localStorage.setItem('reader_last_id', id);
+  document.querySelectorAll('.r-item').forEach(x => x.classList.toggle('on', x.dataset.id === id));
   renderReader();
 }
 
@@ -1249,7 +1361,7 @@ function renderReader() {
   if (!a) return;
   const head = a.cover ? `<img src="${a.cover}" alt="封面">` : '';
   const sents = (a.sentences || []).map((s, i) => `
-    <div class="r-sent">
+    <div class="r-sent" data-i="${i}">
       <button class="play" data-i="${i}" ${s.audio ? '' : 'disabled'} title="播放">▶</button>
       <span>${renderTokens(s.tokens, s.text)}</span>
     </div>`).join('');
@@ -1263,11 +1375,13 @@ function renderReader() {
     <div class="reader-body">${sents}</div>`;
   $('rReader').querySelectorAll('.play').forEach(btn => {
     btn.onclick = () => {
-      const s = a.sentences[+btn.dataset.i];
+      const i = +btn.dataset.i;
+      const s = a.sentences[i];
       if (!s || !s.audio) return;
       if (READ.audio) READ.audio.pause();
       READ.audio = new Audio(s.audio);
       READ.audio.play();
+      $('rReader').querySelectorAll('.r-sent').forEach(x => x.classList.toggle('on', +x.dataset.i === i));
     };
   });
 }
@@ -1275,6 +1389,26 @@ function renderReader() {
 $('rGrade').onchange = readerLoadList;
 $('btnReloadReader').onclick = readerLoadList;
 fillReaderGrades();
+
+/* 左侧栏折叠 */
+(function initSide() {
+  const btn = $('sideToggle');
+  const saved = localStorage.getItem('side_hidden');
+  if (saved === '1' || (saved === null && window.matchMedia('(max-width: 768px)').matches)) {
+    document.body.classList.add('side-hidden');
+  }
+  function apply() {
+    const hidden = document.body.classList.contains('side-hidden');
+    btn.textContent = hidden ? '›' : '‹';
+    btn.title = hidden ? '展开侧栏' : '收起侧栏';
+  }
+  btn.onclick = () => {
+    document.body.classList.toggle('side-hidden');
+    localStorage.setItem('side_hidden', document.body.classList.contains('side-hidden') ? '1' : '0');
+    apply();
+  };
+  apply();
+})();
 
 boot();
 setInterval(poll, 700);
