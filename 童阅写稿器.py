@@ -662,24 +662,56 @@ def quiz_save_local(name, questions):
     return len(cleaned)
 
 
-def _loads_quiz_array(raw):
-    """宽松解析 AI 返回的题目 JSON 数组：剥离 markdown 围栏、清理裸换行与尾逗号。"""
-    raw = re.sub(r"```(?:json|JSON)?", "", raw or "").strip()
-    m = re.search(r"\[[\s\S]*\]", raw)
-    if not m:
-        raise RuntimeError("AI 没有返回题目数组")
-    text = m.group(0)
+def _dump_bad_raw(raw):
     try:
-        return json.loads(text)
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with (DATA_DIR / "quiz-raw-error.log").open("a", encoding="utf-8") as f:
+            f.write("=== %s ===\n%s\n\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), raw or ""))
     except Exception:
         pass
-    # 去掉对象/数组末尾多余逗号，字符串内裸换行替换为空格
-    fixed = re.sub(r",(\s*[\]}])", r"\1", text)
-    fixed = fixed.replace("\r", " ").replace("\n", " ")
-    try:
-        return json.loads(fixed)
-    except Exception as exc:
-        raise RuntimeError("AI 题目 JSON 解析失败：%s" % exc)
+
+
+def _extract_quiz_items(raw):
+    """整体 JSON 解析失败时的兜底：按字段正则逐题提取，返回题目 dict 列表。"""
+    questions = []
+    qs = re.findall(r'"q"\s*:\s*"([^"]*)"', raw)
+    opts = re.findall(r'"o"\s*:\s*\[([^\]]*)\]', raw)
+    ans = re.findall(r'"a"\s*:\s*(\d+)', raw)
+    lvl = re.findall(r'"l"\s*:\s*(\d+)', raw)
+    for i, stem in enumerate(qs):
+        options = re.findall(r'"([^"]*)"', opts[i]) if i < len(opts) else []
+        if len(options) < 2:
+            continue
+        item = {"q": stem.strip(), "o": options}
+        if i < len(ans):
+            item["a"] = int(ans[i])
+        if i < len(lvl):
+            item["l"] = int(lvl[i])
+        questions.append(item)
+    return questions
+
+
+def _loads_quiz_array(raw):
+    """宽松解析 AI 返回的题目 JSON 数组：剥离围栏、清理裸换行/尾逗号，失败落盘原始返回。"""
+    raw0 = (raw or "").strip()
+    raw = re.sub(r"```(?:json|JSON)?", "", raw0).strip()
+    m = re.search(r"\[[\s\S]*\]", raw)
+    if not m:
+        _dump_bad_raw(raw0)
+        raise RuntimeError("AI 没有返回题目数组；片段：%s" % raw0[:120])
+    text = m.group(0)
+    candidates = [text, re.sub(r",(\s*[\]}])", r"\1", text).replace("\r", " ").replace("\n", " ")]
+    exc = None
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except Exception as e:
+            exc = e
+    fallback = _extract_quiz_items(raw0)
+    if fallback:
+        return fallback
+    _dump_bad_raw(raw0)
+    raise RuntimeError("AI 题目 JSON 解析失败：%s；片段：%s" % (exc, raw0[:120]))
 
 
 def _quiz_prompt(stage_label, grade, subj, n, hint):
