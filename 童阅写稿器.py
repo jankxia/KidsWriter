@@ -794,6 +794,38 @@ def quiz_upload_pack(cfg, log):
     return {"changed": changed, "total": total, "version": stamp}
 
 
+def _quiz_dedup_merge(base, additions):
+    """按题干去重合并：保留基线，追加题干不重复的新题。"""
+    seen = {str(q.get("q", "")).strip() for q in base}
+    merged, added = list(base), 0
+    for q in additions:
+        key = str(q.get("q", "")).strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(q)
+        added += 1
+    return merged, added
+
+
+def quiz_ai_commit(cfg, stage, grade, subject, new_questions, log):
+    """AI 出题后自动合并基线、落盘暂存并回传网盘，无需手动保存/上传。"""
+    name = quiz_grade_file(stage, grade)
+    base = quiz_local_questions(name)
+    if base is None:
+        try:
+            base = quiz_questions(cfg, name)
+        except Exception:
+            base = []
+    merged, added = _quiz_dedup_merge(base, new_questions)
+    for q in merged[len(base):]:
+        q["id"] = quiz_next_id(merged, stage, grade, subject)
+    quiz_save_local(name, merged)
+    result = quiz_upload_pack(cfg, log)
+    return {"name": name, "added": added, "total": len(merged),
+            "changed": result["changed"], "version": result["version"]}
+
+
 # ---------------------------------------------------------------- 阅读（网盘文章）
 def _ol_article_dir(cfg):
     return "/" + cfg["root"].strip("/") + "/content/ai"
@@ -1967,7 +1999,13 @@ class Handler(BaseHTTPRequestHandler):
                     cfg, data.get("stage"), int(data.get("grade") or 1),
                     data.get("subject"), int(data.get("count") or 5),
                     data.get("topic") or "")
-                return self._send(200, {"ok": True, "questions": questions})
+                resp = {"ok": True, "questions": questions}
+                if data.get("autoupload", True):
+                    result = quiz_ai_commit(
+                        cfg, data.get("stage"), int(data.get("grade") or 1),
+                        data.get("subject"), questions, push)
+                    resp.update({"uploaded": True, **result})
+                return self._send(200, resp)
             except Exception as exc:
                 return self._send(200, {"ok": False, "msg": str(exc)[:160]})
 
