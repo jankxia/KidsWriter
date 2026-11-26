@@ -780,9 +780,11 @@ def reader_list_articles(cfg, category=""):
     def fetch(name):
         try:
             node = json.loads(ol.read(_ol_article_dir(cfg) + "/" + name).decode("utf-8"))
+            sents = node.get("sentences") or []
+            chars = sum(len(s.get("text", "")) for s in sents)
             return {"id": node.get("id") or name[:-5], "title": node.get("title", ""),
-                    "category": node.get("category", ""), "chars": node.get("maxChars", 0),
-                    "sents": len(node.get("sentences") or []), "cover": node.get("cover", "")}
+                    "category": node.get("category", ""), "chars": chars,
+                    "sents": len(sents), "cover": node.get("cover", "")}
         except Exception:
             return None
 
@@ -803,16 +805,50 @@ def reader_get_article(cfg, aid):
     node = json.loads(ol.read(_ol_article_dir(cfg) + "/" + aid + ".json").decode("utf-8"))
     sents = []
     for s in node.get("sentences") or []:
-        audio = s.get("audio") or ""
         sents.append({
             "text": s.get("text", ""),
             "tokens": s.get("tokens") or [],
-            "audio": _ol_abs_url(cfg, audio) if audio else "",
+            "audio": s.get("audio") or "",
+            "image": s.get("image") or "",
         })
-    cover = node.get("cover") or ""
+    chars = sum(len(s.get("text", "")) for s in sents)
+    cover = ""
+    try:
+        entries = ol.list("/" + cfg["root"].strip("/") + "/" + aid)
+        if any(e["name"].lower() == "cover.jpg" for e in entries):
+            cover = "/api/reader/cover?id=" + aid
+    except Exception:
+        pass
     return {"id": node.get("id", aid), "title": node.get("title", ""),
             "category": node.get("category", ""), "body": node.get("body", ""),
-            "cover": _ol_abs_url(cfg, cover) if cover else "", "sentences": sents}
+            "chars": chars, "cover": cover, "sentences": sents}
+
+
+def reader_audio_bytes(cfg, aid, idx):
+    """后端在内网代取某篇文章某句的配音 mp3 字节，供前端同源代理播放，
+    避免浏览器直连 OpenList 局域网地址在跨网段/隧道下不可达。"""
+    if not aid or "/" in aid or "\\" in aid:
+        raise RuntimeError("文章 id 不合法")
+    ol = OL(cfg["server"])
+    ol.login(cfg["user"], cfg["password"])
+    node = json.loads(ol.read(_ol_article_dir(cfg) + "/" + aid + ".json").decode("utf-8"))
+    sents = node.get("sentences") or []
+    if idx < 0 or idx >= len(sents):
+        raise RuntimeError("句子序号不合法")
+    rel = sents[idx].get("audio") or ""
+    if not rel:
+        raise RuntimeError("该句无配音")
+    return ol.read(rel)
+
+
+def reader_cover_bytes(cfg, aid):
+    """后端在内网代取文章封面 cover.jpg，供前端同源代理显示。"""
+    if not aid or "/" in aid or "\\" in aid:
+        raise RuntimeError("文章 id 不合法")
+    ol = OL(cfg["server"])
+    ol.login(cfg["user"], cfg["password"])
+    rel = "/" + cfg["root"].strip("/") + "/" + aid + "/cover.jpg"
+    return ol.read(rel)
 
 
 # ---------------------------------------------------------------- 文本
@@ -1508,6 +1544,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_bytes(self, code, data, ctype="application/octet-stream"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(data)
+
     # ---- 鉴权 ----
     ADMIN_GET = {"/api/state", "/api/tasks", "/api/quiz/edits"}
     ADMIN_POST = {"/api/start", "/api/stop", "/api/upload", "/api/test",
@@ -1515,7 +1559,8 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/quiz/ai", "/api/quiz/save", "/api/quiz/upload"}
     # 登录即可（管理员、一般账户都能访问）的答题/阅读接口
     USER_GET = {"/api/quiz/manifest", "/api/quiz/file", "/api/quiz/edit",
-                "/api/reader/articles", "/api/reader/article"}
+                "/api/reader/articles", "/api/reader/article", "/api/reader/audio",
+                "/api/reader/cover"}
 
     def _read_token(self):
         h = self.headers.get("Authorization", "")
@@ -1648,6 +1693,27 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, "article": reader_get_article(cfg, aid)})
             except Exception as exc:
                 return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/reader/audio":
+            q = urllib.parse.parse_qs(parsed.query)
+            aid = (q.get("id") or [""])[0]
+            try:
+                idx = int((q.get("i") or ["0"])[0])
+            except ValueError:
+                idx = -1
+            cfg = load_config()
+            try:
+                data = reader_audio_bytes(cfg, aid, idx)
+                return self._send_bytes(200, data, "audio/mpeg")
+            except Exception as exc:
+                return self._send(404, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/reader/cover":
+            aid = (urllib.parse.parse_qs(parsed.query).get("id") or [""])[0]
+            cfg = load_config()
+            try:
+                data = reader_cover_bytes(cfg, aid)
+                return self._send_bytes(200, data, "image/jpeg")
+            except Exception as exc:
+                return self._send(404, {"ok": False, "msg": str(exc)[:160]})
         if path == "/api/quiz/edits":
             staged = []
             if QUIZ_EDIT_DIR.exists():

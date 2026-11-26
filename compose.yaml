@@ -1,7 +1,7 @@
 services:
   kidswriter:
     # 用发布好的镜像；想从源码构建就注释掉 image，改用 build: .
-    image: ghcr.io/jankxia/kidswriter:v2.2
+    image: ghcr.io/jankxia/kidswriter:v2.3
     # build: .
     container_name: kidswriter
     restart: unless-stopped

@@ -231,7 +231,7 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 /* ---- 答题库 ---- */
 .quiz-main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-height: 0; }
 .quiz-side { flex: 0 0 336px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-.quiz-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.quiz-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
 .subj-box { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 2px; }
 .subj-box label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #6b6252; cursor: pointer; }
 .subj-box input { accent-color: #ff7a45; }
@@ -322,6 +322,8 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 .reader-head .r-title-big { font-size: 22px; font-weight: 700; color: #2b2b2b; }
 .reader-head .r-cat { font-size: 12.5px; color: #a09580; margin-top: 6px; }
 .reader-body { display: flex; flex-direction: column; gap: 12px; line-height: 2; }
+#rReader { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#rReader .reader-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .r-sent { display: flex; gap: 10px; align-items: flex-start; font-size: 15.5px; color: #2b2b2b; }
 .r-sent .play { flex: 0 0 30px; height: 30px; border-radius: 8px; border: 1px solid #ffb08c;
   background: #fff7f2; color: #d9633a; cursor: pointer; font-size: 14px; }
@@ -372,7 +374,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.2</span>
+  <span class="ver">v2.3</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1368,7 +1370,7 @@ function renderTokens(tokens, text) {
 function renderReader() {
   const a = READ.current;
   if (!a) return;
-  const head = a.cover ? `<img src="${a.cover}" alt="封面">` : '';
+  const head = a.cover ? `<img src="${a.cover}" alt="封面" onerror="this.remove()">` : '';
   const sents = (a.sentences || []).map((s, i) => `
     <div class="r-sent" data-i="${i}">
       <button class="play" data-i="${i}" ${s.audio ? '' : 'disabled'} title="播放">▶</button>
@@ -1398,7 +1400,8 @@ function playSentence(i) {
   $('rReader').querySelectorAll('.r-sent').forEach(x => x.classList.toggle('on', +x.dataset.i === i));
   const s = sents[i];
   if (!s || !s.audio) { playSentence(i + 1); return; }
-  const au = new Audio(s.audio);
+  const proxied = "/api/reader/audio?id=" + encodeURIComponent(a.id) + "&i=" + i;
+  const au = new Audio(proxied);
   READ.audio = au;
   au.onended = () => playSentence(i + 1);
   au.play().catch(() => {});
