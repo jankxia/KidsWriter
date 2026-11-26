@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>童阅写稿器</title>
+<title>阅答题</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -16,7 +16,48 @@ header {
 }
 header h1 { font-size: 22px; letter-spacing: 1px; }
 header .ver { color: #b7ae9d; font-size: 12px; }
-header .flow { color: #9a917f; font-size: 12.5px; margin-left: auto; }
+header .flow { color: #9a917f; font-size: 12.5px; }
+.me-area { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.me-info { font-size: 12.5px; color: #6b6252; }
+.btn-primary {
+  height: 36px; border: none; border-radius: 9px; background: #ff7a45;
+  color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.btn-primary:hover { background: #f06a35; }
+
+.login-mask {
+  position: fixed; inset: 0; background: rgba(60, 50, 30, .35);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.login-box {
+  background: #fff; border-radius: 18px; padding: 30px 28px; width: 320px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .18); display: flex; flex-direction: column; gap: 12px;
+}
+.login-box h1 { font-size: 24px; text-align: center; }
+.login-sub { text-align: center; color: #9a917f; font-size: 13px; margin-top: -6px; }
+.login-box input {
+  height: 38px; padding: 0 12px; border: 1px solid #e6e0d4; border-radius: 9px;
+  background: #fdfcf9; font-size: 14px; outline: none; font-family: inherit;
+}
+.login-msg { color: #d9534f; font-size: 12.5px; min-height: 16px; text-align: center; }
+
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(60, 50, 30, .3);
+  display: flex; align-items: center; justify-content: center; z-index: 90;
+}
+.modal-box {
+  background: #fff; border-radius: 16px; padding: 22px 24px; width: 430px;
+  max-height: 80vh; overflow-y: auto;
+}
+.modal-box h2 { font-size: 16px; margin-bottom: 14px; }
+.acct-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0ebe0; }
+.acct-row .a-name { flex: 1 1 auto; }
+.acct-row .a-role { font-size: 12px; color: #9a917f; }
+.acct-add { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.acct-add input, .acct-add select {
+  height: 34px; padding: 0 10px; border: 1px solid #e6e0d4; border-radius: 8px;
+  background: #fdfcf9; font-size: 13px; font-family: inherit; outline: none;
+}
 main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-height: 0; }
 
 .col-left { flex: 0 0 336px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
@@ -155,6 +196,104 @@ main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-heigh
 .log-body .write { color: #7a6ca8; }
 .log-body .run { color: #cf8a1f; }
 
+/* ---- 顶部页签 ---- */
+[hidden] { display: none !important; }
+#page-writer, #page-quiz, #page-author, #page-reader {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+}
+body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display: none; }
+.tabs { display: flex; gap: 8px; padding: 0 26px 12px; flex: 0 0 auto; }
+.tab-btn {
+  height: 36px; padding: 0 20px; border: 1px solid #e6e0d4; background: #fff;
+  border-radius: 10px; color: #6b6252; font-size: 14px; font-family: inherit; cursor: pointer;
+}
+.tab-btn.active { background: #ff7a45; border-color: #ff7a45; color: #fff; font-weight: 600; }
+.tab-btn:not(.active):hover { border-color: #ffb08c; color: #d9633a; }
+
+/* ---- 答题库 ---- */
+.quiz-main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-height: 0; }
+.quiz-side { flex: 0 0 336px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.quiz-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.subj-box { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 2px; }
+.subj-box label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: #6b6252; cursor: pointer; }
+.subj-box input { accent-color: #ff7a45; }
+.quiz-meta { font-size: 12px; color: #a09580; line-height: 1.7; }
+.quiz-progress { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #6b6252; }
+.quiz-progress .bar { flex: 1 1 auto; height: 6px; background: #f2ecdf; border-radius: 3px; overflow: hidden; }
+.quiz-progress .bar i { display: block; height: 100%; width: 0; background: #ff7a45; border-radius: 3px; transition: width .3s ease; }
+.q-card {
+  background: #fff; border-radius: 16px; padding: 26px 28px;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .07); display: flex; flex-direction: column; gap: 18px;
+}
+.q-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #d9633a; }
+.q-text { font-size: 19px; line-height: 1.7; color: #2b2b2b; font-weight: 600; }
+.opt-grid { display: flex; flex-direction: column; gap: 10px; }
+.opt {
+  display: flex; align-items: center; gap: 12px; padding: 13px 16px; border: 1px solid #e6e0d4;
+  border-radius: 12px; background: #fdfcf9; font-size: 15px; color: #2b2b2b; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.opt .k {
+  flex: 0 0 26px; height: 26px; border-radius: 8px; background: #f2ecdf; color: #8a8172;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
+}
+.opt:hover:not(:disabled) { border-color: #ffb08c; background: #fff; }
+.opt:disabled { cursor: default; }
+.opt.right { border-color: #4fa96b; background: #f0f8f2; }
+.opt.right .k { background: #4fa96b; color: #fff; }
+.opt.wrong { border-color: #d9534f; background: #fdf1f0; }
+.opt.wrong .k { background: #d9534f; color: #fff; }
+.opt.dim { opacity: .55; }
+.quiz-feedback { min-height: 24px; font-size: 14px; font-weight: 600; }
+.quiz-feedback.ok { color: #4fa96b; }
+.quiz-feedback.no { color: #d9534f; }
+.quiz-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.quiz-hint { color: #b7ae9d; font-size: 12.5px; }
+.sum-card { background: #fff; border-radius: 16px; padding: 26px 28px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .07); }
+.sum-score { font-size: 30px; font-weight: 700; color: #ff7a45; }
+.sum-sub { color: #6b6252; font-size: 14px; }
+.review-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.review-item { border: 1px solid #eee6d8; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.7; }
+.review-item .r-q { font-weight: 600; color: #2b2b2b; }
+.review-item .r-a { color: #8a8172; }
+.review-item.bad { border-color: #efb5ae; background: #fff8f7; }
+.review-item.good { border-color: #bfe3c9; background: #f7fbf8; }
+
+/* ---- 加题目 ---- */
+.q-row { background: #fff; border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .06); border-left: 3px solid #eee6d8;
+  display: flex; flex-direction: column; gap: 7px; }
+.q-row .q-top { display: flex; gap: 8px; align-items: baseline; }
+.q-row .q-stem { font-size: 14px; font-weight: 600; flex: 1 1 auto; color: #2b2b2b; }
+.q-row .q-tag { font-size: 11.5px; color: #a09580; white-space: nowrap; }
+.q-row .q-opts { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #5c5347; }
+.q-row .q-opts .ok { color: #4fa96b; font-weight: 600; }
+.q-row .q-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.q-row .q-del { height: 28px; padding: 0 12px; border-radius: 7px; border: 1px solid #e6e0d4;
+  background: #fff; color: #a09580; font-size: 12px; cursor: pointer; font-family: inherit; }
+.q-row .q-del:hover { border-color: #d9534f; color: #d9534f; }
+
+/* ---- 阅读 ---- */
+.r-item { background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .06); border-left: 3px solid #eee6d8; }
+.r-item:hover { border-left-color: #ff7a45; }
+.r-item.on { border-left-color: #ff7a45; background: #fff7f2; }
+.r-item .r-title { font-size: 14px; font-weight: 600; color: #2b2b2b; }
+.r-item .r-meta { font-size: 12px; color: #a09580; margin-top: 4px; }
+.reader-head { display: flex; gap: 16px; align-items: flex-start; }
+.reader-head img { width: 120px; height: 120px; border-radius: 12px; object-fit: cover; flex: 0 0 auto; }
+.reader-head .r-title-big { font-size: 22px; font-weight: 700; color: #2b2b2b; }
+.reader-head .r-cat { font-size: 12.5px; color: #a09580; margin-top: 6px; }
+.reader-body { display: flex; flex-direction: column; gap: 12px; line-height: 2; }
+.r-sent { display: flex; gap: 10px; align-items: flex-start; font-size: 15.5px; color: #2b2b2b; }
+.r-sent .play { flex: 0 0 30px; height: 30px; border-radius: 8px; border: 1px solid #ffb08c;
+  background: #fff7f2; color: #d9633a; cursor: pointer; font-size: 14px; }
+.r-sent .play:disabled { opacity: .4; cursor: default; }
+.r-sent ruby { margin: 0 1px; }
+.r-sent rt { font-size: 10px; color: #9a917f; }
+.reader-body ruby rt { font-size: 10px; }
+
 footer { flex: 0 0 auto; padding: 4px 28px 14px; font-size: 12px; color: #a09580;
   display: flex; align-items: center; gap: 8px; }
 footer .dot { width: 7px; height: 7px; border-radius: 50%; background: #c9c0ae; }
@@ -162,13 +301,54 @@ footer .dot.on { background: #ff7a45; box-shadow: 0 0 0 3px rgba(255,122,69,.15)
 footer .dot.ok { background: #4fa96b; }
 </style>
 </head>
-<body>
+<body class="logged-out">
+<div id="loginMask" class="login-mask" hidden>
+  <div class="login-box">
+    <h1>阅答题</h1>
+    <p class="login-sub">请登录后使用</p>
+    <input id="loginUser" placeholder="账户" autocomplete="username">
+    <input id="loginPass" type="password" placeholder="密码" autocomplete="current-password">
+    <button id="btnLogin" class="btn-primary">登 录</button>
+    <div id="loginMsg" class="login-msg"></div>
+  </div>
+</div>
+
+<div id="acctModal" class="modal-mask" hidden>
+  <div class="modal-box">
+    <h2>账户管理</h2>
+    <div id="acctList"></div>
+    <div class="acct-add">
+      <input id="acctName" placeholder="账户名" style="flex:1 1 100px">
+      <input id="acctPass" type="password" placeholder="密码" style="flex:1 1 100px">
+      <select id="acctRole">
+        <option value="user">一般账户</option>
+        <option value="admin">管理员</option>
+      </select>
+      <button class="btn-primary" id="btnAcctSave" style="height:34px">保存</button>
+    </div>
+    <div id="acctMsg" class="login-msg"></div>
+  </div>
+</div>
+
 <header>
-  <h1>童阅写稿器</h1>
-  <span class="ver">v1.5</span>
-  <span class="flow">写稿 → 逐句配音 → 配封面 → 确认无误 → 点上传 → 电视端自动进列表</span>
+  <h1>阅答题</h1>
+  <span class="ver">v2.0</span>
+  <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
+  <span class="me-area">
+    <span id="meInfo" class="me-info"></span>
+    <button id="btnAccounts" class="btn-ghost" hidden>账户管理</button>
+    <button id="btnLogout" class="btn-ghost" hidden>退出</button>
+  </span>
 </header>
 
+<nav class="tabs">
+  <button class="tab-btn active" data-page="writer">写稿器</button>
+  <button class="tab-btn" data-page="quiz">答题库</button>
+  <button class="tab-btn" data-page="author">加题目</button>
+  <button class="tab-btn" data-page="reader">阅读</button>
+</nav>
+
+<div id="page-writer">
 <main>
   <div class="col-left">
     <div class="card">
@@ -223,6 +403,133 @@ footer .dot.ok { background: #4fa96b; }
     </div>
   </div>
 </main>
+</div>
+
+<div id="page-quiz" hidden>
+<div class="quiz-main">
+  <div class="quiz-side">
+    <div class="card">
+      <h2>练习设置</h2>
+      <div class="field"><label>学段</label><select id="qStage"></select></div>
+      <div class="field"><label>年级</label><select id="qGrade"></select></div>
+      <div class="field" style="align-items:flex-start"><label style="padding-top:9px">学科</label>
+        <div class="subj-box" id="qSubjects"></div>
+      </div>
+      <div class="field"><label>题数</label>
+        <select id="qCount">
+          <option value="5">5 题</option>
+          <option value="10" selected>10 题</option>
+          <option value="15">15 题</option>
+          <option value="20">20 题</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="btn-main" id="qStart">开始练习</button>
+      </div>
+      <div class="quiz-meta" id="qMeta">题库加载中…</div>
+    </div>
+    <div class="card">
+      <h2>累计成绩</h2>
+      <div class="quiz-meta" id="qStats">还没有练习记录</div>
+    </div>
+  </div>
+  <div class="quiz-body" id="qBody">
+    <div class="q-card" id="qEmpty">
+      <div class="q-text">从左边选好学段、年级和学科，点「开始练习」。</div>
+      <div class="quiz-hint">题库存放在 OpenList 夸克网盘，与电视端 CleanMiTV 共用同一套题；首次打开会先拉取对应年级文件。</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="page-author" hidden>
+<div class="quiz-main">
+  <div class="quiz-side">
+    <div class="card">
+      <h2>出题设置</h2>
+      <div class="field"><label>学段</label><select id="aStage"></select></div>
+      <div class="field"><label>年级</label><select id="aGrade"></select></div>
+      <div class="field"><label>学科</label><select id="aSubject"></select></div>
+      <div class="field"><label>题数</label>
+        <select id="aAiCount">
+          <option value="5">5 题</option>
+          <option value="10" selected>10 题</option>
+          <option value="15">15 题</option>
+          <option value="20">20 题</option>
+        </select>
+      </div>
+      <div class="field" style="align-items:flex-start"><label style="padding-top:9px">知识点</label>
+        <div class="topic-box">
+          <textarea id="aTopic" placeholder="留空由 AI 按年级水平自由出题"></textarea>
+          <div class="topic-side">
+            <button class="btn-ghost" id="btnAi">AI 生成</button>
+            <button class="btn-ghost" id="btnLoadEdit">载入年级</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>手动加一题</h2>
+      <div class="field"><label>题干</label><input id="aQ" placeholder="输入题目"></div>
+      <div class="row2">
+        <div class="field"><label>选项1</label><input id="aO1"></div>
+        <div class="field"><label>选项2</label><input id="aO2"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>选项3</label><input id="aO3"></div>
+        <div class="field"><label>选项4</label><input id="aO4"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>答案</label>
+          <select id="aAns"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select>
+        </div>
+        <div class="field"><label>难度</label>
+          <select id="aLevel"><option value="1">1 易</option><option value="2">2</option><option value="3">3 中</option><option value="4">4</option><option value="5">5 难</option></select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-main" id="btnAdd">加入本题</button>
+      </div>
+    </div>
+  </div>
+  <div class="quiz-body">
+    <div class="tasks-head">
+      <span id="aSummary">还没有题目</span>
+      <div class="spacer"></div>
+      <button class="btn-mini" id="btnSave">保存暂存</button>
+      <button class="btn-mini" id="btnUpload">上传题库到网盘</button>
+    </div>
+    <div class="tasks" id="aList"><div class="t-empty">选好学段、年级、学科，用「AI 生成」或手动加题；确认后保存暂存，再上传题库。</div></div>
+    <div class="logs">
+      <div class="logs-head">出题日志<div class="spacer"></div><span id="aStatus">就绪</span></div>
+      <div class="log-body" id="aLog"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="page-reader" hidden>
+<div class="quiz-main">
+  <div class="quiz-side">
+    <div class="card">
+      <h2>文章列表</h2>
+      <div class="field"><label>年级</label>
+        <select id="rGrade"></select>
+      </div>
+      <div class="actions">
+        <button class="btn-ghost" id="btnReloadReader" style="width:100%">刷新列表</button>
+      </div>
+    </div>
+    <div class="tasks" id="rList" style="flex:1 1 auto"><div class="t-empty">网盘上还没有文章。</div></div>
+  </div>
+  <div class="quiz-body">
+    <div class="q-card" id="rReader">
+      <div class="q-text">从左边选一篇文章开始阅读。</div>
+      <div class="quiz-hint">文章、封面与逐句音频都在 OpenList 夸克网盘，与电视端 KidsReader 同一套。</div>
+    </div>
+  </div>
+</div>
+</div>
 
 <footer>
   <span class="dot" id="statusDot"></span>
@@ -244,17 +551,121 @@ function fillGrades() {
   $('grade').innerHTML = GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
 }
 
+const ME = { username: "", role: "", pages: [] };
+const ALL_PAGES = ["writer", "quiz", "author", "reader"];
+
 async function boot() {
   fillGrades();
+  const me = await (await fetch('/api/me')).json();
+  if (!me.ok) { showLogin(); return; }
+  applyMe(me);
+  await loadConfig();
+  await refreshTopic();
+}
+
+async function loadConfig() {
   try {
     const c = await (await fetch('/api/config')).json();
-    $('server').value = c.server; $('user').value = c.user; $('password').value = c.password;
+    if (c.server !== undefined) $('server').value = c.server;
+    if (c.user !== undefined) $('user').value = c.user;
+    if (c.password !== undefined) $('password').value = c.password;
     $('grade').value = c.grade || '小学二年级';
     $('chars').value = c.chars; $('count').value = c.count;
     $('portText').textContent = '服务端口 ' + c.port + ' · 封面图池 ' + c.covers + ' 张';
   } catch (e) {}
+}
+
+function applyMe(me) {
+  ME.username = me.username; ME.role = me.role; ME.pages = me.pages || [];
+  document.body.classList.remove('logged-out');
+  $('loginMask').hidden = true;
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.hidden = !ME.pages.includes(btn.dataset.page);
+  });
+  ALL_PAGES.forEach(p => { $('page-' + p).hidden = !ME.pages.includes(p); });
+  $('meInfo').textContent = ME.role === 'admin' ? `${ME.username} · 管理员` : ME.username;
+  $('btnLogout').hidden = false;
+  $('btnAccounts').hidden = ME.role !== 'admin';
+  switchPage(ME.pages[0]);
+  // 登录成功后按权限刷新各页元数据，避免停留未登录时的错误态
+  if (ME.pages.includes("quiz") && typeof quizLoadMeta === "function") quizLoadMeta();
+  if (ME.pages.includes("reader") && typeof readerLoadList === "function") readerLoadList();
+}
+
+function showLogin() {
+  document.body.classList.add('logged-out');
+  $('loginMask').hidden = false;
+  $('loginUser').focus();
+}
+
+function switchPage(page) {
+  if (!ME.pages.includes(page)) page = ME.pages[0];
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+  ALL_PAGES.forEach(p => { $('page-' + p).hidden = p !== page; });
+}
+
+async function doLogin() {
+  const r = await (await fetch('/api/login', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ username: $('loginUser').value.trim(), password: $('loginPass').value })
+  })).json();
+  if (!r.ok) { $('loginMsg').textContent = r.msg || '登录失败'; return; }
+  $('loginMsg').textContent = '';
+  applyMe(r);
+  await loadConfig();
   await refreshTopic();
 }
+
+async function doLogout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
+}
+
+/* ================= 账户管理（管理员） ================= */
+async function acctRefresh() {
+  const r = await (await fetch('/api/accounts')).json();
+  if (!r.ok) { $('acctMsg').textContent = r.msg || ''; return; }
+  const list = $('acctList');
+  list.innerHTML = '';
+  (r.users || []).forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'acct-row';
+    const role = u.role === 'admin' ? '管理员' : '一般账户';
+    row.innerHTML = `<span class="a-name">${escapeHtml(u.username)}</span>
+      <span class="a-role">${role}</span>`;
+    if (u.username !== 'admin') {
+      const del = document.createElement('button');
+      del.className = 'btn-ghost'; del.textContent = '删除';
+      del.onclick = async () => {
+        const d = await (await fetch('/api/accounts/delete', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ username: u.username })
+        })).json();
+        $('acctMsg').textContent = d.msg || '';
+        acctRefresh();
+      };
+      row.appendChild(del);
+    }
+    list.appendChild(row);
+  });
+}
+
+$('btnAccounts').onclick = async () => { await acctRefresh(); $('acctModal').hidden = false; };
+$('btnAcctSave').onclick = async () => {
+  const r = await (await fetch('/api/accounts', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      username: $('acctName').value.trim(),
+      password: $('acctPass').value,
+      role: $('acctRole').value
+    })
+  })).json();
+  $('acctMsg').textContent = r.msg || '';
+  if (r.ok) { $('acctName').value = ''; $('acctPass').value = ''; acctRefresh(); }
+};
+$('acctModal').addEventListener('click', e => {
+  if (e.target === $('acctModal')) $('acctModal').hidden = true;
+});
 
 async function refreshTopic() {
   try {
@@ -385,6 +796,7 @@ function syncSelection() {
 }
 
 async function poll() {
+  if (!ME.username) return;
   try {
     const d = await (await fetch('/api/state?since=' + cursor)).json();
     running = d.running;
@@ -486,6 +898,383 @@ $('selAll').onchange = e => {
   else selected.clear();
   syncSelection();
 };
+
+/* ================= 答题库 ================= */
+const QUIZ = { meta: null, bank: [], round: [], idx: 0, right: 0, wrong: 0, history: [], playing: false };
+const Q_LETTERS = ['A', 'B', 'C', 'D'];
+const CN_NUM = ['一','二','三','四','五','六','七','八','九','十','十一','十二'];
+
+function escapeHtml(t) {
+  return String(t == null ? '' : t).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function quizGradeFile(stage, grade) { return `${stage}-${grade}.json`; }
+function quizStage() { return $('qStage').value; }
+
+async function quizLoadMeta() {
+  try {
+    const m = await (await fetch('/api/quiz/manifest')).json();
+    if (!m.ok) { $('qMeta').textContent = '题库不可用：' + (m.msg || ''); return; }
+    QUIZ.meta = m;
+    $('qStage').innerHTML = Object.keys(m.stages)
+      .map(s => `<option value="${s}">${m.stages[s].label}</option>`).join('');
+    quizRenderGrades(); quizRenderSubjects();
+    const total = m.count || m.files.length;
+    $('qMeta').textContent = `题库版本 ${m.version || '—'} · 共 ${total} 题 · ${m.files.length} 个年级文件`;
+    quizLoadStats();
+  } catch (e) { $('qMeta').textContent = '题库连接失败：' + e.message; }
+}
+
+function quizRenderGrades() {
+  const st = QUIZ.meta.stages[quizStage()];
+  $('qGrade').innerHTML = st.grades.map(g =>
+    `<option value="${g}">${st.label}${CN_NUM[g - 1]}年级</option>`).join('');
+}
+function quizRenderSubjects() {
+  const st = QUIZ.meta.stages[quizStage()];
+  $('qSubjects').innerHTML = st.subjects.map(s => {
+    const label = (QUIZ.meta.subject_labels || {})[s] || s;
+    return `<label><input type="checkbox" value="${s}" checked>${label}</label>`;
+  }).join('');
+}
+function quizSelectedSubjects() {
+  return [...document.querySelectorAll('#qSubjects input:checked')].map(i => i.value);
+}
+
+async function quizStart() {
+  if (!QUIZ.meta) return;
+  const stage = quizStage();
+  const grade = +$('qGrade').value;
+  const subjects = quizSelectedSubjects();
+  const n = +$('qCount').value;
+  $('qBody').innerHTML = '<div class="q-card"><div class="quiz-hint">正在拉取题库…</div></div>';
+  try {
+    const r = await (await fetch('/api/quiz/file?name=' +
+      encodeURIComponent(quizGradeFile(stage, grade)))).json();
+    if (!r.ok) {
+      $('qBody').innerHTML = `<div class="q-card"><div class="quiz-feedback no">拉取失败：${r.msg || ''}</div></div>`;
+      return;
+    }
+    let bank = r.questions || [];
+    if (subjects.length) bank = bank.filter(q => subjects.includes(q.s));
+    const seen = new Set();
+    bank = bank.filter(q => { if (seen.has(q.id)) return false; seen.add(q.id); return true; });
+    shuffle(bank);
+    QUIZ.bank = bank;
+    QUIZ.round = bank.slice(0, Math.min(n, bank.length));
+    if (!QUIZ.round.length) {
+      $('qBody').innerHTML = '<div class="q-card"><div class="quiz-feedback no">这个筛选条件下没有题目，换个学科试试。</div></div>';
+      return;
+    }
+    QUIZ.idx = 0; QUIZ.right = 0; QUIZ.wrong = 0; QUIZ.history = []; QUIZ.playing = true;
+    quizRenderQuestion();
+  } catch (e) {
+    $('qBody').innerHTML = `<div class="q-card"><div class="quiz-feedback no">连接失败：${e.message}</div></div>`;
+  }
+}
+
+function quizRenderQuestion() {
+  const q = QUIZ.round[QUIZ.idx];
+  const total = QUIZ.round.length;
+  const stageLabel = (QUIZ.meta.stages[q.st] || {}).label || '';
+  const subjLabel = (QUIZ.meta.subject_labels || {})[q.s] || q.s;
+  $('qBody').innerHTML = `
+    <div class="quiz-progress">
+      <span>第 ${QUIZ.idx + 1} / ${total} 题</span>
+      <div class="bar"><i style="width:${100 * QUIZ.idx / total}%"></i></div>
+      <span>对 ${QUIZ.right} · 错 ${QUIZ.wrong}</span>
+    </div>
+    <div class="q-card">
+      <div class="q-tag">${subjLabel} · ${stageLabel}${CN_NUM[q.g - 1] || ''}年级</div>
+      <div class="q-text">${escapeHtml(q.q)}</div>
+      <div class="opt-grid" id="qOpts">
+        ${q.o.map((opt, i) => `<button class="opt" data-i="${i}">
+          <span class="k">${Q_LETTERS[i] || i + 1}</span><span>${escapeHtml(opt)}</span></button>`).join('')}
+      </div>
+      <div class="quiz-feedback" id="qFb"></div>
+      <div class="quiz-actions"><button class="btn-main" id="qNext" disabled>下一题</button></div>
+    </div>`;
+  [...document.querySelectorAll('.opt')].forEach(btn => { btn.onclick = () => quizAnswer(+btn.dataset.i); });
+  $('qNext').onclick = quizNext;
+}
+
+function quizAnswer(i) {
+  const q = QUIZ.round[QUIZ.idx];
+  const opts = [...document.querySelectorAll('.opt')];
+  opts.forEach(o => { o.disabled = true; });
+  const ok = i === q.a;
+  if (ok) QUIZ.right++; else QUIZ.wrong++;
+  opts[q.a].classList.add('right');
+  if (!ok) opts[i].classList.add('wrong');
+  opts.forEach((o, oi) => { if (oi !== q.a && oi !== i) o.classList.add('dim'); });
+  const fb = $('qFb');
+  if (ok) { fb.className = 'quiz-feedback ok'; fb.textContent = '回答正确！'; }
+  else { fb.className = 'quiz-feedback no';
+    fb.textContent = `答错了，正确答案是 ${Q_LETTERS[q.a]}：${q.o[q.a]}`; }
+  QUIZ.history.push({ q, pick: i, ok });
+  $('qNext').disabled = false;
+  $('qNext').textContent = QUIZ.idx + 1 < QUIZ.round.length ? '下一题' : '查看结果';
+}
+
+function quizNext() {
+  QUIZ.idx++;
+  if (QUIZ.idx < QUIZ.round.length) quizRenderQuestion();
+  else quizSummary();
+}
+
+function quizSummary() {
+  QUIZ.playing = false;
+  const total = QUIZ.round.length;
+  const pct = total ? Math.round(100 * QUIZ.right / total) : 0;
+  const cheer = pct >= 80 ? '很不错，继续保持！' : pct >= 60 ? '还可以，错题再练一轮。' : '别灰心，再来一轮巩固一下。';
+  saveQuizStats(QUIZ.right, QUIZ.wrong, total);
+  $('qBody').innerHTML = `
+    <div class="sum-card">
+      <div class="sum-score">${QUIZ.right} / ${total} 答对 · ${pct} 分</div>
+      <div class="sum-sub">${cheer}</div>
+      <div class="review-list">
+        ${QUIZ.history.map(h => `
+          <div class="review-item ${h.ok ? 'good' : 'bad'}">
+            <div class="r-q">${escapeHtml(h.q.q)}</div>
+            <div class="r-a">你的答案：${Q_LETTERS[h.pick] || h.pick} ${escapeHtml(h.q.o[h.pick])}${h.ok ? '' : ' · 正确答案：' + Q_LETTERS[h.q.a] + ' ' + escapeHtml(h.q.o[h.q.a])}</div>
+          </div>`).join('')}
+      </div>
+      <div class="quiz-actions">
+        <button class="btn-ghost" id="qAgain">再来一轮</button>
+        <button class="btn-main" id="qBack" style="flex:0 0 120px">返回设置</button>
+      </div>
+    </div>`;
+  $('qAgain').onclick = quizStart;
+  $('qBack').onclick = quizResetView;
+  quizLoadStats();
+}
+
+function quizResetView() {
+  QUIZ.playing = false;
+  $('qBody').innerHTML = `<div class="q-card">
+    <div class="q-text">从左边选好学段、年级和学科，点「开始练习」。</div>
+    <div class="quiz-hint">题库存放在 OpenList 夸克网盘，与电视端 CleanMiTV 共用同一套题。</div></div>`;
+}
+
+function saveQuizStats(right, wrong) {
+  const s = JSON.parse(localStorage.getItem('quiz_stats') || '{"rounds":0,"right":0,"wrong":0}');
+  s.rounds++; s.right += right; s.wrong += wrong;
+  localStorage.setItem('quiz_stats', JSON.stringify(s));
+}
+function quizLoadStats() {
+  const s = JSON.parse(localStorage.getItem('quiz_stats') || '{"rounds":0,"right":0,"wrong":0}');
+  $('qStats').textContent = s.rounds
+    ? `练习 ${s.rounds} 轮 · 累计答对 ${s.right} 题 · 答错 ${s.wrong} 题` : '还没有练习记录';
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => switchPage(btn.dataset.page);
+});
+$('btnLogin').onclick = doLogin;
+$('loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+$('btnLogout').onclick = doLogout;
+$('qStage').onchange = () => { quizRenderGrades(); quizRenderSubjects(); };
+$('qStart').onclick = quizStart;
+quizLoadMeta();
+
+/* ================= 加题目 ================= */
+const AUTH = { name: "", questions: [], stage: "primary", grade: 1, subject: "chinese" };
+
+function authStage() { return $('aStage').value; }
+function authRenderGrades() {
+  const st = QUIZ.meta.stages[authStage()];
+  const label = st.label;
+  $('aGrade').innerHTML = st.grades.map(g =>
+    `<option value="${g}">${label}${CN_NUM[g - 1]}年级</option>`).join('');
+}
+function authRenderSubjects() {
+  const st = QUIZ.meta.stages[authStage()];
+  $('aSubject').innerHTML = st.subjects.map(s =>
+    `<option value="${s}">${(QUIZ.meta.subject_labels || {})[s] || s}</option>`).join('');
+}
+function authFileName() { return quizGradeFile(authStage(), +$('aGrade').value); }
+function authLog(msg) {
+  const div = document.createElement('div');
+  div.textContent = msg;
+  $('aLog').appendChild(div);
+  $('aStatus').textContent = msg;
+  $('aLog').scrollTop = $('aLog').scrollHeight;
+}
+
+async function authLoad() {
+  AUTH.stage = authStage();
+  AUTH.grade = +$('aGrade').value;
+  AUTH.subject = $('aSubject').value;
+  AUTH.name = authFileName();
+  const r = await (await fetch('/api/quiz/edit?name=' + encodeURIComponent(AUTH.name))).json();
+  if (!r.ok) { authLog('载入失败：' + (r.msg || '')); return; }
+  AUTH.questions = r.questions || [];
+  authLog(`已载入 ${AUTH.name}，共 ${AUTH.questions.length} 题（${r.source === 'local' ? '本地暂存' : '网盘基线'}）`);
+  authRender();
+}
+
+function authRender() {
+  const list = $('aList');
+  list.innerHTML = '';
+  if (!AUTH.questions.length) {
+    list.innerHTML = '<div class="t-empty">还没有题目，用 AI 生成或手动加入。</div>';
+  }
+  AUTH.questions.forEach((q, i) => {
+    const el = document.createElement('div');
+    el.className = 'q-row';
+    const subj = (QUIZ.meta.subject_labels || {})[q.s] || q.s;
+    el.innerHTML = `
+      <div class="q-top">
+        <span class="q-tag">${subj} · ${q.g}年级</span>
+        <span class="q-stem">${escapeHtml(q.q)}</span>
+      </div>
+      <div class="q-opts">
+        ${q.o.map((o, oi) => `<div class="${oi === q.a ? 'ok' : ''}">${Q_LETTERS[oi]}. ${escapeHtml(o)}</div>`).join('')}
+      </div>
+      <div class="q-actions"><button class="q-del" data-i="${i}">删除</button></div>`;
+    el.querySelector('.q-del').onclick = () => {
+      AUTH.questions.splice(i, 1);
+      authRender();
+    };
+    list.appendChild(el);
+  });
+  const subs = [...new Set(AUTH.questions.map(q => q.s))];
+  $('aSummary').textContent = `${AUTH.name || ''} · 共 ${AUTH.questions.length} 题 · 学科 ${subs.length} 类`;
+}
+
+function authCollectForm() {
+  const opts = [$('aO1').value.trim(), $('aO2').value.trim(), $('aO3').value.trim(), $('aO4').value.trim()];
+  if (!$('aQ').value.trim()) throw '题干不能为空';
+  if (opts.some(o => !o)) throw '四个选项都要填完整';
+  return { q: $('aQ').value.trim(), o: opts, a: +$('aAns').value, l: +$('aLevel').value, s: AUTH.subject };
+}
+
+function authClearForm() {
+  ['aQ', 'aO1', 'aO2', 'aO3', 'aO4'].forEach(id => $(id).value = '');
+  $('aAns').value = '0'; $('aLevel').value = '1';
+}
+
+async function authAi() {
+  authLog('AI 出题中…');
+  const body = { stage: AUTH.stage, grade: AUTH.grade, subject: AUTH.subject,
+    count: +$('aAiCount').value, topic: $('aTopic').value.trim() };
+  const r = await (await fetch('/api/quiz/ai', { method: 'POST', body: JSON.stringify(body) })).json();
+  if (!r.ok) { authLog('AI 出题失败：' + (r.msg || '')); return; }
+  AUTH.questions.push(...(r.questions || []));
+  authLog(`AI 生成 ${r.questions.length} 题，已并入当前年级列表`);
+  authRender();
+}
+
+async function authSave() {
+  const r = await (await fetch('/api/quiz/save', {
+    method: 'POST', body: JSON.stringify({ name: AUTH.name, questions: AUTH.questions })
+  })).json();
+  if (r.ok) authLog(`已保存暂存 ${AUTH.name}，${r.count} 题；确认无误后点「上传题库到网盘」`);
+  else authLog('保存失败：' + (r.msg || ''));
+}
+
+async function authUpload() {
+  authLog('开始上传题库到网盘…');
+  const r = await (await fetch('/api/quiz/upload', { method: 'POST', body: '{}' })).json();
+  if (r.ok) authLog(`上传完成：${(r.changed || []).length} 个年级文件，共 ${r.total} 题，版本 ${r.version}`);
+  else authLog('上传失败：' + (r.msg || ''));
+}
+
+$('aStage').onchange = () => { authRenderGrades(); authRenderSubjects(); authLoad(); };
+$('aGrade').onchange = authLoad;
+$('aSubject').onchange = () => { AUTH.subject = $('aSubject').value; };
+$('btnAdd').onclick = () => {
+  try {
+    AUTH.questions.push(authCollectForm());
+    authClearForm();
+    authRender();
+  } catch (e) { authLog(e); }
+};
+$('btnAi').onclick = authAi;
+$('btnLoadEdit').onclick = authLoad;
+$('btnSave').onclick = authSave;
+$('btnUpload').onclick = authUpload;
+
+/* ================= 阅读 ================= */
+const READ = { articles: [], current: null, audio: null };
+
+function fillReaderGrades() {
+  $('rGrade').innerHTML = '<option value="">全部</option>' +
+    GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
+}
+
+async function readerLoadList() {
+  const cat = $('rGrade').value;
+  const r = await (await fetch('/api/reader/articles?category=' + encodeURIComponent(cat))).json();
+  const list = $('rList');
+  if (!r.ok) { list.innerHTML = `<div class="t-empty">加载失败：${escapeHtml(r.msg || '')}</div>`; return; }
+  READ.articles = r.articles || [];
+  if (!READ.articles.length) { list.innerHTML = '<div class="t-empty">网盘上还没有文章。</div>'; return; }
+  list.innerHTML = '';
+  READ.articles.forEach(a => {
+    const el = document.createElement('div');
+    el.className = 'r-item';
+    el.innerHTML = `<div class="r-title">${escapeHtml(a.title || a.id)}</div>
+      <div class="r-meta">${escapeHtml(a.category)} · ${a.chars} 字 · ${a.sents} 句</div>`;
+    el.onclick = () => readerOpen(a.id, el);
+    list.appendChild(el);
+  });
+}
+
+async function readerOpen(id, el) {
+  const r = await (await fetch('/api/reader/article?id=' + encodeURIComponent(id))).json();
+  if (!r.ok) { $('rReader').innerHTML = `<div class="q-text">打开失败：${escapeHtml(r.msg || '')}</div>`; return; }
+  READ.current = r.article;
+  document.querySelectorAll('.r-item').forEach(x => x.classList.remove('on'));
+  if (el) el.classList.add('on');
+  renderReader();
+}
+
+function renderTokens(tokens, text) {
+  if (!tokens || !tokens.length) return escapeHtml(text);
+  return tokens.map(t => t.p
+    ? `<ruby>${escapeHtml(t.h)}<rt>${escapeHtml(t.p)}</rt></ruby>`
+    : escapeHtml(t.h)).join('');
+}
+
+function renderReader() {
+  const a = READ.current;
+  if (!a) return;
+  const head = a.cover ? `<img src="${a.cover}" alt="封面">` : '';
+  const sents = (a.sentences || []).map((s, i) => `
+    <div class="r-sent">
+      <button class="play" data-i="${i}" ${s.audio ? '' : 'disabled'} title="播放">▶</button>
+      <span>${renderTokens(s.tokens, s.text)}</span>
+    </div>`).join('');
+  $('rReader').innerHTML = `
+    <div class="reader-head">${head}
+      <div>
+        <div class="r-title-big">${escapeHtml(a.title)}</div>
+        <div class="r-cat">${escapeHtml(a.category)} · ${a.id}</div>
+      </div>
+    </div>
+    <div class="reader-body">${sents}</div>`;
+  $('rReader').querySelectorAll('.play').forEach(btn => {
+    btn.onclick = () => {
+      const s = a.sentences[+btn.dataset.i];
+      if (!s || !s.audio) return;
+      if (READ.audio) READ.audio.pause();
+      READ.audio = new Audio(s.audio);
+      READ.audio.play();
+    };
+  });
+}
+
+$('rGrade').onchange = readerLoadList;
+$('btnReloadReader').onclick = readerLoadList;
+fillReaderGrades();
 
 boot();
 setInterval(poll, 700);

@@ -12,5 +12,7 @@
   "grade": "小学二年级",
   "chars": 400,
   "count": 2,
-  "skip_dup": true
+  "skip_dup": true,
+  "quiz_url": "",
+  "quiz_root": "夸克/CleanMiTV/quiz"
 }

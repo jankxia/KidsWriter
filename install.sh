@@ -1,5 +1,5 @@
 #!/bin/sh
-# 童阅写稿器 一键安装 / 升级（飞牛 NAS 或任何装好 docker 的 Linux）
+# 阅答题（原童阅写稿器）一键安装 / 升级（飞牛 NAS 或任何装好 docker 的 Linux）
 #
 # 用法：
 #   sh install.sh                    # 交互执行，会提示输入 sudo 密码
@@ -9,7 +9,7 @@
 set -e
 
 DIR=${DIR:-/vol1/1000/kidswriter}
-IMAGE=${IMAGE:-ghcr.io/jankxia/kidswriter:v1.2}
+IMAGE=${IMAGE:-ghcr.io/jankxia/kidswriter:v2.0}
 PORT=${PORT:-8122}
 SUBNET=${SUBNET:-172.32.0.0/24}
 

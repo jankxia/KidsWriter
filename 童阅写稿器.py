@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""童阅写稿器：生成文章（文字 + 封面 + 逐句音频），确认后再上传夸克盘。
+"""阅答题（原童阅写稿器）：文章生成（文字 + 封面 + 逐句音频）、题库出题/校验/上传、在线答题与阅读，确认后再传夸克盘。
 
 用法：
     双击 启动.bat                      打开界面（本地 http://127.0.0.1:8122）
@@ -17,10 +17,12 @@ import os
 import pathlib
 import random
 import re
+import secrets
 import shutil
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -32,7 +34,18 @@ CONFIG_PATH = DATA_DIR / "config.json"
 COVERS = pathlib.Path(os.environ.get("KIDSWRITER_COVERS") or (APP_DIR / "covers"))
 OUTPUT = DATA_DIR / "输出"
 UI_HTML = pathlib.Path(os.environ.get("KIDSWRITER_UI") or (APP_DIR / "界面.html"))
+ACCOUNTS_PATH = DATA_DIR / "accounts.json"
 PORT = int(os.environ.get("KIDSWRITER_PORT") or 8122)
+
+# 会话表：token -> {"username":..., "role":"admin|user"}
+_SESSIONS = {}
+_ACCOUNT_LOCK = threading.Lock()
+
+# 角色可见页面：管理员全部；一般账户只做阅读和答题
+ROLE_PAGES = {
+    "admin": ["writer", "quiz", "author", "reader"],
+    "user": ["quiz", "reader"],
+}
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KidsReaderWriter/1.0"
 
@@ -123,6 +136,10 @@ DEFAULT_CONFIG = {
     "chars": 400,
     "count": 2,
     "skip_dup": True,
+    # 题库包清单地址留空走默认（内网 OpenList → 外网反代 → GitHub 镜像），填了优先用这个
+    "quiz_url": "",
+    # 题库在 OpenList 上的目录，电视端 CleanMiTV 与本工具共用这一套
+    "quiz_root": "夸克/CleanMiTV/quiz",
 }
 
 
@@ -148,6 +165,92 @@ def save_config(cfg):
         CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------- 账户
+def accounts_default():
+    return {"users": [{"username": "admin", "password": "jankxia", "role": "admin"}]}
+
+
+def accounts_load():
+    if not ACCOUNTS_PATH.exists():
+        d = accounts_default()
+        accounts_save(d)
+        return d
+    try:
+        d = json.loads(ACCOUNTS_PATH.read_text(encoding="utf-8-sig"))
+        if isinstance(d, dict) and isinstance(d.get("users"), list):
+            return d
+    except Exception:
+        pass
+    return accounts_default()
+
+
+def accounts_save(d):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ACCOUNTS_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def auth_check(username, password):
+    """校验账号密码，返回 {username, role} 或 None。"""
+    username = (username or "").strip()
+    for u in accounts_load()["users"]:
+        if u.get("username") == username and u.get("password") == password:
+            return {"username": u["username"], "role": u.get("role", "user")}
+    return None
+
+
+def auth_issue(user):
+    token = secrets.token_hex(16)
+    _SESSIONS[token] = {"username": user["username"], "role": user["role"]}
+    return token
+
+
+def auth_by_token(token):
+    if not token:
+        return None
+    return _SESSIONS.get(token)
+
+
+def auth_list_users():
+    """账户列表（不回传密码）。"""
+    return [{"username": u["username"], "role": u.get("role", "user")}
+            for u in accounts_load()["users"]]
+
+
+def auth_upsert_user(username, password, role):
+    """新增或改密；role 仅 admin/user。返回 ok/msg。"""
+    username = (username or "").strip()
+    if not username or not password:
+        return False, "账户名和密码不能为空"
+    if role not in ("admin", "user"):
+        role = "user"
+    d = accounts_load()
+    for u in d["users"]:
+        if u["username"] == username:
+            u["password"] = password
+            u["role"] = role
+            accounts_save(d)
+            return True, "已更新账户 %s" % username
+    d["users"].append({"username": username, "password": password, "role": role})
+    accounts_save(d)
+    return True, "已新增账户 %s" % username
+
+
+def auth_delete_user(username):
+    d = accounts_load()
+    admins = [u for u in d["users"] if u.get("role") == "admin"]
+    target = next((u for u in d["users"] if u["username"] == username), None)
+    if not target:
+        return False, "账户不存在"
+    if target.get("role") == "admin" and len(admins) <= 1:
+        return False, "至少保留一个管理员"
+    d["users"] = [u for u in d["users"] if u["username"] != username]
+    accounts_save(d)
+    for tok, sess in list(_SESSIONS.items()):
+        if sess["username"] == username:
+            _SESSIONS.pop(tok, None)
+    return True, "已删除账户 %s" % username
 
 
 # ---------------------------------------------------------------- 网盘
@@ -212,6 +315,504 @@ class OL:
     def mkdir(self, path):
         r = self._req("/api/fs/mkdir", {"path": path})
         return r.get("code") == 200
+
+
+# ---------------------------------------------------------------- 题库包
+# 题库与 CleanMiTV 电视端共用一套：清单先内网 OpenList，再外网反代，最后 GitHub 镜像。
+# 大资源不打进镜像，用的时候按年级文件从网盘拉，后端代理给前端，避免浏览器跨域。
+QUIZ_URLS = [
+    "http://192.168.1.24:5244/p/%E5%A4%B8%E5%85%8B/CleanMiTV/quiz/index.json",
+    "https://list.717611.xyz/p/%E5%A4%B8%E5%85%8B/CleanMiTV/quiz/index.json",
+    "https://github.com/jankxia/cleanmitv/releases/download/quiz-pack-v4/index.json",
+]
+
+QUIZ_STAGES = {
+    "primary": {"label": "小学", "grades": [1, 2, 3, 4, 5, 6],
+                "subjects": ["chinese", "math", "english"]},
+    "middle": {"label": "初中", "grades": [7, 8, 9],
+               "subjects": ["chinese", "math", "english", "history", "physics", "chemistry"]},
+    "high": {"label": "高中", "grades": [10, 11, 12],
+             "subjects": ["chinese", "math", "english", "physics", "chemistry", "biology",
+                          "history", "geography", "politics"]},
+}
+
+SUBJECT_LABELS = {
+    "chinese": "语文", "math": "数学", "english": "英语", "history": "历史",
+    "physics": "物理", "chemistry": "化学", "biology": "生物",
+    "geography": "地理", "politics": "政治",
+}
+
+QUIZ_FILE_RE = re.compile(r"^(primary|middle|high)-(\d+)\.json$")
+QUIZ_CACHE_GAP = 5 * 60          # 清单多久内不重新探一次，秒
+QUIZ_CHUNK = 32768               # 长文件断点续读的块大小
+
+_quiz_manifest = {"at": 0.0, "root": None, "base": ""}
+_quiz_files = {}                 # 年级文件名 -> 题目列表（后端内存缓存）
+
+
+def quiz_candidates(cfg):
+    out = []
+    saved = (cfg.get("quiz_url") or "").strip()
+    if saved:
+        out.append(saved)
+    for u in QUIZ_URLS:
+        if u not in out:
+            out.append(u)
+    return out
+
+
+def _is_lan(url):
+    return url.startswith("http://192.168.") or url.startswith("http://10.") \
+        or url.startswith("http://127.0.0.1") or url.startswith("http://localhost/")
+
+
+def _read_deadline(r, deadline, chunk=65536):
+    """分块读取，超过 deadline 直接抛超时；urlopen 的 timeout 只管单次 socket 操作，不包总时长。"""
+    out = bytearray()
+    while True:
+        if time.time() > deadline:
+            raise TimeoutError("读取超时")
+        part = r.read(chunk)
+        if not part:
+            break
+        out.extend(part)
+    return bytes(out)
+
+
+import concurrent.futures
+_quiz_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+
+def _quiz_fetch_once(url, eff):
+    deadline = time.time() + eff
+    # 内网地址直连，不经过系统代理；外网走系统代理（本机代理 127.0.0.1:2080）
+    if _is_lan(url):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    else:
+        opener = urllib.request.build_opener()
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", UA)
+    req.add_header("Connection", "close")
+    req.add_header("Accept-Encoding", "identity")
+    with opener.open(req, timeout=max(2, eff // 2)) as r:
+        return _read_deadline(r, deadline)
+
+
+def _quiz_is_local(url):
+    return url.startswith("file://") or os.path.exists(url)
+
+
+def _quiz_local_read(url):
+    p = url[7:] if url.startswith("file://") else url
+    if os.path.isdir(p):
+        p = os.path.join(p, "index.json")
+    with open(p, "rb") as f:
+        return f.read()
+
+
+def _quiz_join(base, name):
+    if _quiz_is_local(base):
+        b = base[7:] if base.startswith("file://") else base
+        return os.path.join(b, name)
+    return base[:base.rfind("/") + 1] + name
+
+
+def _quiz_http_get(url, timeout):
+    """读一个 URL；本地目录直读；OpenList 长连接不主动关，要求 Connection: close，短读再走 Range 续读。"""
+    if _quiz_is_local(url):
+        return _quiz_local_read(url)
+    last = None
+    eff = min(5000 if _is_lan(url) else 10000, timeout)
+    try:
+        fut = _quiz_pool.submit(_quiz_fetch_once, url, eff)
+        body = fut.result(timeout=eff + 2)
+        if body:
+            return body
+    except Exception as exc:
+        last = exc
+        # 连不上、超时、HTTP 错误（含 502）直接换下一个镜像，不做断点续读
+        if isinstance(exc, (urllib.error.URLError, TimeoutError, OSError,
+                             concurrent.futures.TimeoutError)):
+            raise
+    # 只剩流式中断这类情况：按 32KB 块断点续读
+    return _quiz_http_ranged(url, timeout, last)
+
+
+def _quiz_http_ranged(url, timeout, last_err):
+    out = bytearray()
+    total = -1
+    eff = min(5000 if _is_lan(url) else 10000, timeout)
+    for attempt in range(3):
+        pos = len(out)
+        end = total > 0 and min(pos + QUIZ_CHUNK, total) - 1 or pos + QUIZ_CHUNK - 1
+        req = urllib.request.Request(url)
+        req.add_header("User-Agent", UA)
+        req.add_header("Connection", "close")
+        req.add_header("Accept-Encoding", "identity")
+        req.add_header("Range", "bytes=%d-%d" % (pos, end))
+        try:
+            with urllib.request.urlopen(req, timeout=eff) as r:
+                code = getattr(r, "status", 200)
+                if code == 200:
+                    return r.read()
+                if code != 206:
+                    raise RuntimeError("HTTP %d" % code)
+                cr = r.headers.get("Content-Range")
+                if cr and total < 0:
+                    tail = cr.rsplit("/", 1)[-1]
+                    if tail.isdigit():
+                        total = int(tail)
+                part = r.read()
+                if not part:
+                    raise RuntimeError("empty range at %d" % pos)
+                out.extend(part)
+                attempt = 0
+                if total > 0 and len(out) >= total:
+                    break
+                if total < 0 and len(part) < QUIZ_CHUNK:
+                    break
+        except Exception as exc:
+            if attempt == 5:
+                raise RuntimeError("续读失败：%s" % exc)
+            time.sleep(0.4 * (attempt + 1))
+    if total > 0 and len(out) != total:
+        raise RuntimeError("短读 %d/%d" % (len(out), total))
+    return bytes(out)
+
+
+def quiz_manifest(cfg, force=False):
+    """返回 (清单 dict, 答中的镜像 base)；五分钟内复用缓存。"""
+    if not force and _quiz_manifest["root"] and \
+            time.time() - _quiz_manifest["at"] < QUIZ_CACHE_GAP:
+        return _quiz_manifest["root"], _quiz_manifest["base"]
+    last = None
+    for base in quiz_candidates(cfg):
+        if not base:
+            continue
+        try:
+            body = _quiz_http_get(base, 20000)
+            root = json.loads(body.decode("utf-8"))
+            files = root.get("files") or []
+            if files:
+                _quiz_manifest.update(at=time.time(), root=root, base=base)
+                return root, base
+        except Exception as exc:
+            last = exc
+    raise RuntimeError("题库清单拉取失败：%s" % str(last)[:120])
+
+
+def _quiz_file_mirrors(base, entry, name):
+    """清单里给了 url 就先用；否则按答中的镜像目录拼；再把其余候选目录都试一遍。"""
+    links = []
+    link = (entry or {}).get("url") or ""
+    if link:
+        links.append(link)
+    links.append(_quiz_join(base, name))
+    for other in quiz_candidates(load_config()):
+        links.append(_quiz_join(other, name))
+    seen, uniq = set(), []
+    for u in links:
+        if u and u not in seen:
+            seen.add(u)
+            uniq.append(u)
+    return uniq
+
+
+def quiz_questions(cfg, name):
+    """按年级文件名取题目列表，带 sha256 校验与后端缓存。"""
+    m = QUIZ_FILE_RE.match(name or "")
+    if not m:
+        raise RuntimeError("题库文件名不合法：%s" % name)
+    if name in _quiz_files:
+        return _quiz_files[name]
+    root, base = quiz_manifest(cfg)
+    entry = next((f for f in root.get("files", []) if f.get("name") == name), None)
+    sha = (entry or {}).get("sha256", "").strip().lower()
+    last = None
+    for link in _quiz_file_mirrors(base, entry, name):
+        try:
+            body = _quiz_http_get(link, 60000)
+            if sha:
+                digest = hashlib.sha256(body).hexdigest()
+                if not digest.startswith(sha):
+                    raise RuntimeError("校验和不符：%s" % name)
+            node = json.loads(body.decode("utf-8"))
+            questions = node.get("questions") or []
+            if not questions:
+                raise RuntimeError("题库为空：%s" % name)
+            _quiz_files[name] = questions
+            return questions
+        except Exception as exc:
+            last = exc
+    raise RuntimeError("题库 %s 拉取失败：%s" % (name, str(last)[:120]))
+
+
+def quiz_grade_file(stage, grade):
+    return "%s-%d.json" % (stage, int(grade))
+
+
+# ---------------- 出题 / 校验 / 上传 ----------------
+QUIZ_EDIT_DIR = DATA_DIR / "quiz-edit"
+
+STAGE_PREFIX = {"primary": "p", "middle": "m", "high": "h"}
+SUBJ_CODE = {
+    "chinese": "cs", "math": "ma", "english": "en", "history": "hi",
+    "physics": "ph", "chemistry": "ch", "biology": "bi",
+    "geography": "ge", "politics": "po",
+}
+
+
+def quiz_edit_path(name):
+    return QUIZ_EDIT_DIR / name
+
+
+def quiz_local_questions(name):
+    """本地暂存的题目；没有就返回 None。"""
+    p = quiz_edit_path(name)
+    if not p.exists():
+        return None
+    try:
+        node = json.loads(p.read_text(encoding="utf-8-sig"))
+        return node.get("questions") or []
+    except Exception:
+        return None
+
+
+def quiz_next_id(questions, stage, grade, subject):
+    pre = STAGE_PREFIX[stage] + str(grade) + SUBJ_CODE.get(subject, "qt")
+    seq = 1
+    for q in questions:
+        qid = str(q.get("id") or "")
+        if qid.startswith(pre):
+            tail = qid[len(pre):]
+            if tail.isdigit():
+                seq = max(seq, int(tail) + 1)
+    return "%s%04d" % (pre, seq)
+
+
+def quiz_normalize(q, stage, grade, subject, idx):
+    """补齐字段、去空白；返回规范后的题目 dict。"""
+    opts = [str(x).strip() for x in (q.get("o") or []) if str(x).strip()]
+    a = q.get("a")
+    if not isinstance(a, int):
+        try:
+            a = int(a)
+        except Exception:
+            a = 0
+    level = q.get("l")
+    if not isinstance(level, int) or level < 1 or level > 5:
+        level = 1
+    qid = str(q.get("id") or "").strip() or quiz_next_id([], stage, grade, subject)
+    return {
+        "id": qid, "st": stage, "g": int(grade), "s": subject,
+        "q": str(q.get("q") or "").strip(), "o": opts, "a": a, "l": level,
+    }
+
+
+def quiz_validate(questions, stage, grade, subject):
+    """返回错误列表；空列表即通过。"""
+    errors, seen = [], set()
+    for i, q in enumerate(questions):
+        qid = q.get("id") or "#%d" % (i + 1)
+        if not q.get("q"):
+            errors.append("%s：题干为空" % qid)
+        if len(q.get("o") or []) < 2:
+            errors.append("%s：选项少于 2 个" % qid)
+        a = q.get("a")
+        if not isinstance(a, int) or a < 0 or a >= len(q.get("o") or []):
+            errors.append("%s：答案序号不合法" % qid)
+        if qid in seen:
+            errors.append("%s：编号重复" % qid)
+        seen.add(qid)
+    return errors
+
+
+def quiz_load_edit(cfg, name):
+    """编辑用题目：本地暂存优先，其次网盘基线；都没有返回空列表。"""
+    m = QUIZ_FILE_RE.match(name or "")
+    if not m:
+        raise RuntimeError("题库文件名不合法：%s" % name)
+    local = quiz_local_questions(name)
+    if local is not None:
+        return local, "local"
+    try:
+        return quiz_questions(cfg, name), "netdisk"
+    except Exception:
+        return [], "empty"
+
+
+def quiz_save_local(name, questions):
+    """校验通过后写入本地暂存目录，等「上传题库」一起回传网盘。"""
+    m = QUIZ_FILE_RE.match(name or "")
+    if not m:
+        raise RuntimeError("题库文件名不合法：%s" % name)
+    stage, grade = m.group(1), int(m.group(2))
+    cleaned, errors = [], []
+    for i, q in enumerate(questions):
+        nq = quiz_normalize(q, stage, grade, q.get("s") or "common", i)
+        cleaned.append(nq)
+    errors = quiz_validate(cleaned, stage, grade, "")
+    if errors:
+        raise RuntimeError("校验未通过：" + "；".join(errors[:5]))
+    QUIZ_EDIT_DIR.mkdir(parents=True, exist_ok=True)
+    node = {"version": 1, "stage": stage, "grade": grade, "questions": cleaned}
+    quiz_edit_path(name).write_text(
+        json.dumps(node, ensure_ascii=False, indent=2), encoding="utf-8")
+    _quiz_files[name] = cleaned
+    return len(cleaned)
+
+
+def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
+    """调 AI 按 schema 批量出题，返回规范后的题目列表。"""
+    count = max(1, min(20, int(count or 5)))
+    subj = SUBJECT_LABELS.get(subject, subject)
+    stage_label = QUIZ_STAGES[stage]["label"]
+    hint = "围绕%s" % topic if topic.strip() else "适合该年级水平的常见知识点"
+    prompt = (
+        "给%s%s的%s出 %d 道单项选择题，%s。\n"
+        "只输出 JSON 数组，每题格式："
+        "{\"q\":\"题干\",\"o\":[\"选项一\",\"选项二\",\"选项三\",\"选项四\"],\"a\":0,\"l\":1}\n"
+        "其中 a 是正确选项序号（0-3），l 是难度 1-5；四个选项都要简短通顺，干扰项要合理。\n"
+        "不要输出解释、不要 markdown。"
+        % (stage_label, grade, subj, count, hint)
+    )
+    raw = ask_ai(cfg, prompt, max_tokens=max(800, count * 300),
+                 system="你是中小学命题老师，只输出符合格式的 JSON 数组。")
+    m = re.search(r"\[[\s\S]*\]", raw or "")
+    if not m:
+        raise RuntimeError("AI 没有返回题目数组")
+    arr = json.loads(m.group(0))
+    out = []
+    for i, q in enumerate(arr[:count]):
+        nq = quiz_normalize(q, stage, grade, subject, i)
+        nq["id"] = quiz_next_id(out, stage, grade, subject)
+        out.append(nq)
+    errors = quiz_validate(out, stage, grade, subject)
+    if errors:
+        raise RuntimeError("AI 题目校验未通过：" + "；".join(errors[:5]))
+    return out
+
+
+def quiz_pack_payload(name, questions):
+    """打包成网盘文件内容（与电视端解析格式一致）。"""
+    m = QUIZ_FILE_RE.match(name)
+    stage, grade = m.group(1), int(m.group(2))
+    return {"version": 1, "stage": stage, "grade": grade, "questions": questions}
+
+
+def quiz_upload_pack(cfg, log):
+    """把本地暂存合并进网盘基线，回传有改动的年级文件，重建并上传 index.json 清单。"""
+    root = "/" + cfg.get("quiz_root", "夸克/CleanMiTV/quiz").strip("/")
+    ol = OL(cfg["server"])
+    ol.login(cfg["user"], cfg["password"])
+    ol.mkdir(root)
+
+    # 12 个年级文件：本地暂存覆盖网盘基线
+    merged, changed = {}, []
+    for stage, grades in (("primary", range(1, 7)), ("middle", range(7, 10)),
+                          ("high", range(10, 13))):
+        for g in grades:
+            name = quiz_grade_file(stage, g)
+            local = quiz_local_questions(name)
+            if local is not None:
+                questions = local
+                changed.append(name)
+            else:
+                try:
+                    questions = quiz_questions(cfg, name)
+                except Exception:
+                    questions = []
+            merged[name] = questions
+
+    # 回传有改动的年级文件
+    for name in changed:
+        body = json.dumps(quiz_pack_payload(name, merged[name]),
+                           ensure_ascii=False, indent=2).encode("utf-8")
+        ok, msg = ol.put("%s/%s" % (root, name), body)
+        if not ok:
+            raise RuntimeError("上传 %s 失败：%s" % (name, msg))
+        log("已上传 %s（%d 题）" % (name, len(merged[name])))
+
+    # 重建清单：版本号取时间戳，带题量、学科、大小、sha256
+    files, total = [], 0
+    for name, questions in merged.items():
+        body = json.dumps(quiz_pack_payload(name, questions),
+                          ensure_ascii=False, indent=2).encode("utf-8")
+        subjects = sorted({q.get("s", "common") for q in questions})
+        files.append({
+            "name": name, "size": len(body),
+            "sha256": hashlib.sha256(body).hexdigest(),
+            "count": len(questions), "subjects": subjects,
+        })
+        total += len(questions)
+    stamp = time.strftime("%Y-%m-%d-%H%M")
+    manifest = {
+        "version": stamp, "count": total, "generated": time.strftime("%Y-%m-%d"),
+        "files": files,
+    }
+    mbody = json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
+    ok, msg = ol.put("%s/index.json" % root, mbody)
+    if not ok:
+        raise RuntimeError("上传清单失败：%s" % msg)
+    # 清单更新后清掉内存缓存，下次练习拉到新版本
+    _quiz_manifest.update(at=0, root=None, base="")
+    _quiz_files.clear()
+    return {"changed": changed, "total": total, "version": stamp}
+
+
+# ---------------------------------------------------------------- 阅读（网盘文章）
+def _ol_article_dir(cfg):
+    return "/" + cfg["root"].strip("/") + "/content/ai"
+
+
+def _ol_abs_url(cfg, path):
+    if not path:
+        return ""
+    return cfg["server"].rstrip("/") + "/d/" + "/".join(
+        urllib.parse.quote(s) for s in path.strip("/").split("/"))
+
+
+def reader_list_articles(cfg, category=""):
+    ol = OL(cfg["server"])
+    ol.login(cfg["user"], cfg["password"])
+    names = [e["name"] for e in ol.list(_ol_article_dir(cfg)) if e["name"].endswith(".json")]
+
+    def fetch(name):
+        try:
+            node = json.loads(ol.read(_ol_article_dir(cfg) + "/" + name).decode("utf-8"))
+            return {"id": node.get("id") or name[:-5], "title": node.get("title", ""),
+                    "category": node.get("category", ""), "chars": node.get("maxChars", 0),
+                    "sents": len(node.get("sentences") or []), "cover": node.get("cover", "")}
+        except Exception:
+            return None
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        items = [x for x in ex.map(fetch, names) if x]
+    if category:
+        items = [x for x in items if x["category"] == category]
+    items.sort(key=lambda x: x["id"])
+    return items
+
+
+def reader_get_article(cfg, aid):
+    if not aid or "/" in aid or "\\" in aid:
+        raise RuntimeError("文章 id 不合法")
+    ol = OL(cfg["server"])
+    ol.login(cfg["user"], cfg["password"])
+    node = json.loads(ol.read(_ol_article_dir(cfg) + "/" + aid + ".json").decode("utf-8"))
+    sents = []
+    for s in node.get("sentences") or []:
+        audio = s.get("audio") or ""
+        sents.append({
+            "text": s.get("text", ""),
+            "tokens": s.get("tokens") or [],
+            "audio": _ol_abs_url(cfg, audio) if audio else "",
+        })
+    cover = node.get("cover") or ""
+    return {"id": node.get("id", aid), "title": node.get("title", ""),
+            "category": node.get("category", ""), "body": node.get("body", ""),
+            "cover": _ol_abs_url(cfg, cover) if cover else "", "sentences": sents}
 
 
 # ---------------------------------------------------------------- 文本
@@ -907,9 +1508,58 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # ---- 鉴权 ----
+    ADMIN_GET = {"/api/state", "/api/tasks", "/api/quiz/edits"}
+    ADMIN_POST = {"/api/start", "/api/stop", "/api/upload", "/api/test",
+                  "/api/delete", "/api/delete_many", "/api/quiz/ai",
+                  "/api/quiz/save", "/api/quiz/upload"}
+    # 登录即可（管理员、一般账户都能访问）的答题/阅读接口
+    USER_GET = {"/api/quiz/manifest", "/api/quiz/file", "/api/quiz/edit",
+                "/api/reader/articles", "/api/reader/article"}
+
+    def _read_token(self):
+        h = self.headers.get("Authorization", "")
+        if h.startswith("Bearer "):
+            return h[7:].strip()
+        cookie = self.headers.get("Cookie", "")
+        for part in cookie.split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "token":
+                return v.strip()
+        return ""
+
+    def _current(self):
+        return auth_by_token(self._read_token())
+
+    def _guard_admin(self):
+        user = self._current()
+        if not user:
+            self._send(401, {"ok": False, "msg": "未登录，请先登录"})
+            return None
+        if user["role"] != "admin":
+            self._send(403, {"ok": False, "msg": "仅管理员可用此功能"})
+            return None
+        return user
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if path == "/api/me":
+            user = self._current()
+            if not user:
+                return self._send(200, {"ok": False, "msg": "未登录"})
+            return self._send(200, {"ok": True, "username": user["username"],
+                                    "role": user["role"],
+                                    "pages": ROLE_PAGES.get(user["role"], ROLE_PAGES["user"])})
+        if path == "/api/accounts":
+            if not self._guard_admin():
+                return
+            return self._send(200, {"ok": True, "users": auth_list_users()})
+        if path in self.ADMIN_GET:
+            if not self._guard_admin():
+                return
+        if path in self.USER_GET and not self._current():
+            return self._send(401, {"ok": False, "msg": "未登录，请先登录"})
         if path in ("/", "/index.html"):
             html = UI_HTML.read_text(encoding="utf-8") if UI_HTML.exists() else "缺少 界面.html"
             return self._send(200, html, "text/html; charset=utf-8")
@@ -937,12 +1587,77 @@ class Handler(BaseHTTPRequestHandler):
                 })
         if path == "/api/config":
             cfg = load_config()
-            return self._send(200, {
-                "server": cfg["server"], "user": cfg["user"], "password": cfg["password"],
+            me = self._current()
+            is_admin = bool(me and me["role"] == "admin")
+            payload = {
                 "grade": cfg["grade"], "chars": cfg["chars"], "count": cfg["count"],
                 "voice": cfg["voice"], "rate": cfg["rate"], "root": cfg["root"],
                 "covers": len(cover_pool()), "port": PORT,
-            })
+                "quiz_url": cfg.get("quiz_url", ""),
+                "quiz_root": cfg.get("quiz_root", "夸克/CleanMiTV/quiz"),
+                "quiz_stages": QUIZ_STAGES, "subject_labels": SUBJECT_LABELS,
+            }
+            if is_admin:
+                payload.update({"server": cfg["server"], "user": cfg["user"],
+                                "password": cfg["password"]})
+            return self._send(200, payload)
+        if path == "/api/quiz/manifest":
+            cfg = load_config()
+            try:
+                root, base = quiz_manifest(cfg)
+                files = [{
+                    "name": f.get("name"), "size": f.get("size", 0),
+                    "sha256": f.get("sha256", ""),
+                } for f in root.get("files", [])]
+                return self._send(200, {
+                    "ok": True, "version": root.get("version", ""),
+                    "count": root.get("count", 0), "generated": root.get("generated", ""),
+                    "source": base, "files": files,
+                    "stages": QUIZ_STAGES, "subject_labels": SUBJECT_LABELS,
+                })
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/quiz/file":
+            name = (urllib.parse.parse_qs(parsed.query).get("name") or [""])[0]
+            cfg = load_config()
+            try:
+                questions = quiz_questions(cfg, name)
+                return self._send(200, {"ok": True, "name": name, "questions": questions})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/quiz/edit":
+            name = (urllib.parse.parse_qs(parsed.query).get("name") or [""])[0]
+            cfg = load_config()
+            try:
+                questions, source = quiz_load_edit(cfg, name)
+                return self._send(200, {"ok": True, "name": name,
+                                        "questions": questions, "source": source})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/reader/articles":
+            category = (urllib.parse.parse_qs(parsed.query).get("category") or [""])[0]
+            cfg = load_config()
+            try:
+                return self._send(200, {"ok": True, "articles": reader_list_articles(cfg, category)})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/reader/article":
+            aid = (urllib.parse.parse_qs(parsed.query).get("id") or [""])[0]
+            cfg = load_config()
+            try:
+                return self._send(200, {"ok": True, "article": reader_get_article(cfg, aid)})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+        if path == "/api/quiz/edits":
+            staged = []
+            if QUIZ_EDIT_DIR.exists():
+                for p in sorted(QUIZ_EDIT_DIR.glob("*.json")):
+                    try:
+                        node = json.loads(p.read_text(encoding="utf-8-sig"))
+                        staged.append({"name": p.name, "count": len(node.get("questions") or [])})
+                    except Exception:
+                        pass
+            return self._send(200, {"ok": True, "staged": staged})
         if path == "/api/topic":
             return self._send(200, {"topic": random.choice(TOPIC_SAMPLES),
                                     "total": len(TOPIC_SAMPLES)})
@@ -959,6 +1674,56 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
         except Exception:
             data = {}
+
+        if path == "/api/login":
+            user = auth_check(data.get("username"), data.get("password"))
+            if not user:
+                return self._send(200, {"ok": False, "msg": "账户或密码不正确"})
+            token = auth_issue(user)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie",
+                             "token=%s; HttpOnly; Path=/; SameSite=Lax" % token)
+            body = json.dumps({"ok": True, "username": user["username"],
+                               "role": user["role"], "token": token,
+                               "pages": ROLE_PAGES.get(user["role"], ROLE_PAGES["user"])},
+                              ensure_ascii=False).encode("utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if path == "/api/logout":
+            token = self._read_token()
+            _SESSIONS.pop(token, None)
+            self.send_response(200)
+            self.send_header("Set-Cookie", "token=; HttpOnly; Path=/; Max-Age=0")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            body = json.dumps({"ok": True}).encode("utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if path == "/api/accounts":
+            if not self._guard_admin():
+                return
+            ok, msg = auth_upsert_user(data.get("username"), data.get("password"),
+                                       data.get("role", "user"))
+            return self._send(200, {"ok": ok, "msg": msg,
+                                    "users": auth_list_users() if ok else None})
+
+        if path == "/api/accounts/delete":
+            if not self._guard_admin():
+                return
+            ok, msg = auth_delete_user(data.get("username"))
+            return self._send(200, {"ok": ok, "msg": msg,
+                                    "users": auth_list_users() if ok else None})
+
+        if path in self.ADMIN_POST:
+            if not self._guard_admin():
+                return
 
         if path == "/api/start":
             if STATE["running"]:
@@ -1074,6 +1839,41 @@ class Handler(BaseHTTPRequestHandler):
                 "，网盘上的副本没有动" if t.get("upload_done") else ""))
             return self._send(200, {"ok": True, "removed": removed})
 
+        if path == "/api/quiz/ai":
+            cfg = load_config()
+            try:
+                questions = quiz_ai_generate(
+                    cfg, data.get("stage"), int(data.get("grade") or 1),
+                    data.get("subject"), int(data.get("count") or 5),
+                    data.get("topic") or "")
+                return self._send(200, {"ok": True, "questions": questions})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+
+        if path == "/api/quiz/save":
+            name = (data.get("name") or "").strip()
+            questions = data.get("questions") or []
+            try:
+                count = quiz_save_local(name, questions)
+                return self._send(200, {"ok": True, "name": name, "count": count})
+            except Exception as exc:
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+
+        if path == "/api/quiz/upload":
+            cfg = load_config()
+            for k in ("server", "user", "password"):
+                if data.get(k):
+                    cfg[k] = data[k]
+            save_config(cfg)
+            try:
+                result = quiz_upload_pack(cfg, push)
+                push("题库上传完成：%d 个年级文件，共 %d 题，版本 %s"
+                     % (len(result["changed"]), result["total"], result["version"]))
+                return self._send(200, {"ok": True, **result})
+            except Exception as exc:
+                push("题库上传失败：%s" % exc)
+                return self._send(200, {"ok": False, "msg": str(exc)[:160]})
+
         if path == "/api/delete_many":
             ids = data.get("ids") or []
             if not isinstance(ids, list) or not ids:
@@ -1135,7 +1935,7 @@ def serve(port=None, open_browser=True):
     port = port or PORT
     boot_scan()
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    print("童阅写稿器已启动：http://127.0.0.1:%d （关闭窗口即退出）" % port, flush=True)
+    print("阅答题已启动：http://127.0.0.1:%d （关闭窗口即退出）" % port, flush=True)
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open("http://127.0.0.1:%d" % port)).start()
     try:
