@@ -787,6 +787,15 @@ def quiz_pack_payload(name, questions):
     return {"version": 1, "stage": stage, "grade": grade, "questions": questions}
 
 
+def _ol_baseline(ol, root, name):
+    """内网 OL 直读网盘基线题目；不做 sha 校验、不回退外网镜像，失败返回空列表。"""
+    try:
+        node = json.loads(ol.read("%s/%s" % (root, name)).decode("utf-8"))
+        return node.get("questions") or []
+    except Exception:
+        return []
+
+
 def quiz_upload_pack(cfg, log):
     """把本地暂存合并进网盘基线，回传有改动的年级文件，重建并上传 index.json 清单。"""
     root = "/" + cfg.get("quiz_root", "夸克/CleanMiTV/quiz").strip("/")
@@ -794,7 +803,7 @@ def quiz_upload_pack(cfg, log):
     ol.login(cfg["user"], cfg["password"])
     ol.mkdir(root)
 
-    # 12 个年级文件：本地暂存覆盖网盘基线
+    # 12 个年级文件：本地暂存覆盖网盘基线；其余从内网 OL 直读，不走 sha 校验/外网回退
     merged, changed = {}, []
     for stage, grades in (("primary", range(1, 7)), ("middle", range(7, 10)),
                           ("high", range(10, 13))):
@@ -805,10 +814,7 @@ def quiz_upload_pack(cfg, log):
                 questions = local
                 changed.append(name)
             else:
-                try:
-                    questions = quiz_questions(cfg, name)
-                except Exception:
-                    questions = []
+                questions = _ol_baseline(ol, root, name)
             merged[name] = questions
 
     # 回传有改动的年级文件
@@ -866,8 +872,11 @@ def quiz_ai_commit(cfg, stage, grade, subject, new_questions, log):
     name = quiz_grade_file(stage, grade)
     base = quiz_local_questions(name)
     if base is None:
+        root = "/" + cfg.get("quiz_root", "夸克/CleanMiTV/quiz").strip("/")
         try:
-            base = quiz_questions(cfg, name)
+            ol = OL(cfg["server"])
+            ol.login(cfg["user"], cfg["password"])
+            base = _ol_baseline(ol, root, name)
         except Exception:
             base = []
     merged, added = _quiz_dedup_merge(base, new_questions)
