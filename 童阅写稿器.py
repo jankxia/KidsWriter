@@ -931,11 +931,16 @@ def reader_get_article(cfg, aid):
     ol = OL(cfg["server"])
     ol.login(cfg["user"], cfg["password"])
     node = json.loads(ol.read(_ol_article_dir(cfg) + "/" + aid + ".json").decode("utf-8"))
+    is_primary = str(node.get("category", "")).startswith("小学")
     sents = []
     for s in node.get("sentences") or []:
+        toks = s.get("tokens") or []
+        # 老文章或缺 tokens 的小学篇目，读取时实时补逐字注音，避免打开只剩纯汉字
+        if is_primary and not toks and s.get("text"):
+            toks = pinyin_tokens(s["text"])
         sents.append({
             "text": s.get("text", ""),
-            "tokens": s.get("tokens") or [],
+            "tokens": toks,
             "audio": s.get("audio") or "",
             "image": s.get("image") or "",
         })
