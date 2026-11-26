@@ -331,10 +331,10 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 .quiz-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .quiz-hint { color: #b7ae9d; font-size: 12.5px; }
 .sum-card { background: #fff; border-radius: 16px; padding: 26px 28px; display: flex; flex-direction: column; gap: 14px;
-  box-shadow: 0 1px 3px rgba(90, 76, 50, .07); }
+  box-shadow: 0 1px 3px rgba(90, 76, 50, .07); flex: 1 1 auto; min-height: 0; overflow: hidden; }
 .sum-score { font-size: 30px; font-weight: 700; color: #ff7a45; }
 .sum-sub { color: #6b6252; font-size: 14px; }
-.review-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.review-list { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .review-item { border: 1px solid #eee6d8; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.7; }
 .review-item .r-q { font-weight: 600; color: #2b2b2b; }
 .review-item .r-a { color: #8a8172; }
@@ -406,11 +406,11 @@ body.logged-out .tabs, body.logged-out main, body.logged-out .me-area { display:
 .reader-bar i { display: block; height: 100%; width: 40%; border-radius: 3px; background: #ff7a45; animation: readerSlide 1.1s ease-in-out infinite; }
 @keyframes readerSlide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
 
-footer { flex: 0 0 auto; padding: 4px 28px 14px; font-size: 12px; color: #a09580;
-  display: flex; align-items: center; gap: 8px; }
-footer .dot { width: 7px; height: 7px; border-radius: 50%; background: #c9c0ae; }
-footer .dot.on { background: #ff7a45; box-shadow: 0 0 0 3px rgba(255,122,69,.15); }
-footer .dot.ok { background: #4fa96b; }
+footer { flex: 0 0 auto; padding: 6px 26px 12px; font-size: 12px; color: #a09580;
+  display: flex; align-items: center; gap: 10px; }
+footer .f-brand { font-weight: 600; color: #8a8172; white-space: nowrap; }
+footer .f-links { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+footer .f-date { margin-left: auto; white-space: nowrap; }
 </style>
 </head>
 <body class="logged-out">
@@ -444,7 +444,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.18</span>
+  <span class="ver">v2.19</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -655,9 +655,9 @@ footer .dot.ok { background: #4fa96b; }
 </div>
 
 <footer>
-  <span class="dot" id="statusDot"></span>
-  <span id="statusText">就绪</span>
-  <span style="margin-left:auto" id="portText"></span>
+  <span class="f-brand">阅答题 V2.19</span>
+  <span class="f-links">生成文章 · 通用题库</span>
+  <span class="f-date" id="footDate"></span>
 </footer>
 
 <script>
@@ -679,6 +679,11 @@ const ALL_PAGES = ["writer", "author", "quiz", "reader"];
 
 async function boot() {
   fillGrades();
+  const fd = $('footDate');
+  if (fd) {
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    fd.textContent = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
   const me = await (await fetch('/api/me')).json();
   if (!me.ok) { showLogin(); return; }
   applyMe(me);
@@ -697,7 +702,6 @@ async function loadConfig() {
     if ($('aPassword')) $('aPassword').value = c.password || '';
     $('grade').value = c.grade || '小学二年级';
     $('chars').value = c.chars; $('count').value = c.count;
-    $('portText').textContent = '服务端口 ' + c.port + ' · 封面图池 ' + c.covers + ' 张';
   } catch (e) {}
 }
 
@@ -945,10 +949,10 @@ async function poll() {
     const lastIdx = d.lines && d.lines.length ? d.lines[d.lines.length - 1].idx : null;
     cursor = lastIdx !== null ? lastIdx + 1 : d.from;
     renderTasks(d.tasks || []);
-    $('statusText').textContent = d.status || '就绪';
+    if ($('statusText')) $('statusText').textContent = d.status || '就绪';
     $('logStatus').textContent = d.status || '就绪';
     const dot = $('statusDot');
-    dot.className = 'dot' + (d.running ? ' on' : (d.status.indexOf('失败') >= 0 ? '' : ' ok'));
+    if (dot) dot.className = 'dot' + (d.running ? ' on' : (d.status.indexOf('失败') >= 0 ? '' : ' ok'));
     $('btnStart').disabled = d.running;
     $('btnStop').disabled = !d.running;
     $('btnTopic').disabled = d.running;
