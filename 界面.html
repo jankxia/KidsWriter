@@ -70,13 +70,13 @@ main { flex: 1 1 auto; display: flex; gap: 18px; padding: 0 26px 20px; min-heigh
 body.side-hidden .col-left, body.side-hidden .quiz-side { display: none; }
 #sideToggle {
   position: fixed; left: 0; top: 50%; transform: translateY(-50%);
-  width: 16px; height: 56px; border: 1px solid #eee6d8; border-left: none;
-  border-radius: 0 10px 10px 0; background: rgba(255,255,255,.55); color: #b7ae9d; cursor: pointer;
+  width: 16px; height: 56px; border: 1px solid #ff7a45; border-left: none;
+  border-radius: 0 10px 10px 0; background: #ff7a45; color: #fff; cursor: pointer;
   font-size: 13px; display: flex; align-items: center; justify-content: center; z-index: 80;
-  box-shadow: none;
+  box-shadow: 0 1px 4px rgba(255,122,69,.3);
 }
-#sideToggle:hover { color: #8a8172; border-color: #e6e0d4; background: #fff; }
-body.side-hidden #sideToggle { left: 0; border-left: 1px solid #eee6d8; border-right: none; border-radius: 10px 0 0 10px; }
+#sideToggle:hover { background: #f06a35; border-color: #f06a35; color: #fff; }
+body.side-hidden #sideToggle { left: 0; border-left: 1px solid #ff7a45; border-right: none; border-radius: 10px 0 0 10px; }
 @media (max-width: 768px) {
   header { padding: 12px 14px 8px; gap: 8px; flex-wrap: wrap; }
   header h1 { font-size: 18px; }
@@ -444,7 +444,7 @@ footer .f-date { margin-left: auto; white-space: nowrap; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.20</span>
+  <span class="ver">v2.21</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -655,7 +655,7 @@ footer .f-date { margin-left: auto; white-space: nowrap; }
 </div>
 
 <footer>
-  <span class="f-brand">阅答题 V2.20</span>
+  <span class="f-brand">阅答题 V2.21</span>
   <span class="f-links">生成文章 · 通用题库</span>
   <span class="f-date" id="footDate"></span>
 </footer>
