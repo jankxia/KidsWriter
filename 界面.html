@@ -381,7 +381,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.7</span>
+  <span class="ver">v2.8</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1136,15 +1136,49 @@ function quizResetView() {
     <div class="quiz-hint">题库存放在 OpenList 夸克网盘，与电视端 CleanMiTV 共用同一套题。</div></div>`;
 }
 
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function quizStatKey() { return $('qStage').value + '-' + (+$('qGrade').value); }
+function gradeLabel(stage, grade) {
+  const st = QUIZ.meta && QUIZ.meta.stages[stage];
+  const sl = st ? st.label : stage;
+  const cn = CN_NUM[grade - 1] || grade;
+  return `${sl}${cn}年级`;
+}
+function readQuizStats() {
+  try { return JSON.parse(localStorage.getItem('quiz_stats') || '{}'); }
+  catch (e) { return {}; }
+}
 function saveQuizStats(right, wrong) {
-  const s = JSON.parse(localStorage.getItem('quiz_stats') || '{"rounds":0,"right":0,"wrong":0}');
-  s.rounds++; s.right += right; s.wrong += wrong;
+  const s = readQuizStats();
+  s.byGrade = s.byGrade || {};
+  const k = quizStatKey();
+  const g = s.byGrade[k] = s.byGrade[k] || { rounds: 0, right: 0, wrong: 0 };
+  g.rounds++; g.right += right; g.wrong += wrong;
+  const today = todayStr();
+  if (s.today && s.today.date === today) s.today.rounds++;
+  else s.today = { date: today, rounds: 1 };
   localStorage.setItem('quiz_stats', JSON.stringify(s));
 }
 function quizLoadStats() {
-  const s = JSON.parse(localStorage.getItem('quiz_stats') || '{"rounds":0,"right":0,"wrong":0}');
-  $('qStats').textContent = s.rounds
-    ? `练习 ${s.rounds} 轮 · 累计答对 ${s.right} 题 · 答错 ${s.wrong} 题` : '还没有练习记录';
+  const s = readQuizStats();
+  const bg = s.byGrade || {};
+  const keys = Object.keys(bg);
+  const box = $('qStats');
+  if (!keys.length) { box.textContent = '还没有练习记录'; return; }
+  const totalRounds = keys.reduce((a, k) => a + bg[k].rounds, 0);
+  const todayRounds = (s.today && s.today.date === todayStr()) ? s.today.rounds : 0;
+  let html = `<div>累计练习 ${totalRounds} 轮 · 今天练习 ${todayRounds} 轮</div>`;
+  keys.forEach(k => {
+    const parts = k.split('-');
+    const st = parts[0], gr = +parts[1];
+    const g = bg[k];
+    const ans = g.right + g.wrong;
+    html += `<div>${gradeLabel(st, gr)}：累计答题 ${ans} 道，答对 ${g.right} 题 · 答错 ${g.wrong} 题</div>`;
+  });
+  box.innerHTML = html;
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
