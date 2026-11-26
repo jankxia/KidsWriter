@@ -695,8 +695,8 @@ def _quiz_prompt(stage_label, grade, subj, n, hint):
 
 
 def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
-    """分批调 AI 出题并规范成题目列表；每批少量、失败重试，降低长输出破损概率。"""
-    count = max(1, min(20, int(count or 5)))
+    """分批调 AI 出题并规范成题目列表；20 题一批多轮凑满目标题数，批内失败重试。"""
+    count = max(1, min(1000, int(count or 5)))
     subj = SUBJECT_LABELS.get(subject, subject)
     stage_label = QUIZ_STAGES[stage]["label"]
     hint = "围绕%s" % topic if topic.strip() else "适合该年级水平的常见知识点"
@@ -721,6 +721,7 @@ def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
             nq["id"] = quiz_next_id(out, stage, grade, subject)
             out.append(nq)
         remaining -= n
+        push("AI 出题：已生成 %d/%d 题" % (len(out), count))
     errors = quiz_validate(out, stage, grade, subject)
     if errors:
         raise RuntimeError("AI 题目校验未通过：" + "；".join(errors[:5]))
