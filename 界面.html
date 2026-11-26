@@ -381,7 +381,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.15</span>
+  <span class="ver">v2.16</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1317,8 +1317,10 @@ async function authAi() {
   }
   if (!r.ok) { authLog('AI 出题失败：' + (r.msg || '')); return; }
   AUTH.questions.push(...(r.questions || []));
-  if (r.uploaded) authLog(`AI 生成 ${r.questions.length} 题，已自动上传网盘（新增 ${r.added} 题，当前年级共 ${r.total} 题，版本 ${r.version}）`);
-  else authLog(`AI 生成 ${r.questions.length} 题，已并入当前年级列表`);
+  const skipDrop = (r.dropped && r.dropped > 0) ? `，已剔除残缺 ${r.dropped} 题` : '';
+  const dup = r.uploaded ? `，去重后新增 ${r.added} 题` : '';
+  if (r.uploaded) authLog(`AI 生成 ${r.questions.length} 题${skipDrop}${dup}，已自动上传网盘（当前年级共 ${r.total} 题，版本 ${r.version}）`);
+  else authLog(`AI 生成 ${r.questions.length} 题${skipDrop}，已并入当前年级列表`);
   authRender();
 }
 

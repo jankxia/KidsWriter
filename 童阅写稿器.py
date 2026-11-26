@@ -609,6 +609,19 @@ def quiz_normalize(q, stage, grade, subject, idx):
     }
 
 
+def _quiz_item_valid(q):
+    """单题是否合规：题干非空、选项≥2、答案序号在选项范围内。"""
+    if not str(q.get("q") or "").strip():
+        return False
+    opts = q.get("o") or []
+    if len(opts) < 2:
+        return False
+    a = q.get("a")
+    if not isinstance(a, int) or a < 0 or a >= len(opts):
+        return False
+    return True
+
+
 def quiz_validate(questions, stage, grade, subject):
     """返回错误列表；空列表即通过。"""
     errors, seen = [], set()
@@ -733,9 +746,12 @@ def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
     stage_label = QUIZ_STAGES[stage]["label"]
     hint = "围绕%s" % topic if topic.strip() else "适合该年级水平的常见知识点"
     system = "你是中小学命题老师，只输出符合格式的 JSON 数组。"
-    out, remaining, batch = [], count, 20
-    while remaining > 0:
-        n = min(batch, remaining)
+    out, batch, dropped = [], 20, 0
+    max_rounds = (count // batch) + 3
+    for rnd in range(max_rounds):
+        if len(out) >= count:
+            break
+        n = min(batch, count - len(out))
         prompt = _quiz_prompt(stage_label, grade, subj, n, hint)
         arr, last_exc = None, None
         for attempt in range(2):
@@ -750,14 +766,18 @@ def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
             raise RuntimeError("AI 题目生成失败：%s" % last_exc)
         for q in arr[:n]:
             nq = quiz_normalize(q, stage, grade, subject, len(out))
+            if not _quiz_item_valid(nq):
+                dropped += 1
+                continue
             nq["id"] = quiz_next_id(out, stage, grade, subject)
             out.append(nq)
-        remaining -= n
         push("AI 出题：已生成 %d/%d 题" % (len(out), count), channel="quiz")
+    if not out:
+        raise RuntimeError("AI 返回的题目均不合规，请重试")
     errors = quiz_validate(out, stage, grade, subject)
     if errors:
         raise RuntimeError("AI 题目校验未通过：" + "；".join(errors[:5]))
-    return out
+    return out, dropped
 
 
 def quiz_pack_payload(name, questions):
@@ -2035,11 +2055,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/quiz/ai":
             cfg = load_config()
             try:
-                questions = quiz_ai_generate(
+                questions, dropped = quiz_ai_generate(
                     cfg, data.get("stage"), int(data.get("grade") or 1),
                     data.get("subject"), int(data.get("count") or 5),
                     data.get("topic") or "")
-                resp = {"ok": True, "questions": questions}
+                resp = {"ok": True, "questions": questions, "dropped": dropped}
                 if data.get("autoupload", True):
                     result = quiz_ai_commit(
                         cfg, data.get("stage"), int(data.get("grade") or 1),
