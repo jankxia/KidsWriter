@@ -381,7 +381,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.6</span>
+  <span class="ver">v2.7</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -1174,10 +1174,9 @@ function authRenderGrades() {
     `<option value="${g}">${st.label}${CN_NUM[g - 1]}年级</option>`).join('');
 }
 function authRenderSubjects() {
-  if (!QUIZ.meta || !QUIZ.meta.stages[authStage()]) return;
-  const st = QUIZ.meta.stages[authStage()];
-  $('aSubject').innerHTML = st.subjects.map(s =>
-    `<option value="${s}">${(QUIZ.meta.subject_labels || {})[s] || s}</option>`).join('');
+  // 加题目页仅维护语文题，学科锁定 chinese
+  const label = (QUIZ.meta.subject_labels || {})['chinese'] || '语文';
+  $('aSubject').innerHTML = `<option value="chinese">${label}</option>`;
 }
 function authFileName() { return quizGradeFile(authStage(), +$('aGrade').value); }
 function authLog(msg) {
@@ -1204,10 +1203,11 @@ async function authLoad() {
 function authRender() {
   const list = $('aList');
   list.innerHTML = '';
-  if (!AUTH.questions.length) {
-    list.innerHTML = '<div class="t-empty">还没有题目，用 AI 生成或手动加入。</div>';
+  const view = AUTH.questions.filter(q => q.s === 'chinese');
+  if (!view.length) {
+    list.innerHTML = '<div class="t-empty">还没有语文题目，用 AI 生成或手动加入。</div>';
   }
-  AUTH.questions.forEach((q, i) => {
+  view.forEach((q) => {
     const el = document.createElement('div');
     el.className = 'q-row';
     const subj = (QUIZ.meta.subject_labels || {})[q.s] || q.s;
@@ -1219,15 +1219,15 @@ function authRender() {
       <div class="q-opts">
         ${q.o.map((o, oi) => `<div class="${oi === q.a ? 'ok' : ''}">${Q_LETTERS[oi]}. ${escapeHtml(o)}</div>`).join('')}
       </div>
-      <div class="q-actions"><button class="q-del" data-i="${i}">删除</button></div>`;
+      <div class="q-actions"><button class="q-del">删除</button></div>`;
     el.querySelector('.q-del').onclick = () => {
-      AUTH.questions.splice(i, 1);
+      AUTH.questions.splice(AUTH.questions.indexOf(q), 1);
       authRender();
     };
     list.appendChild(el);
   });
-  const subs = [...new Set(AUTH.questions.map(q => q.s))];
-  $('aSummary').textContent = `${AUTH.name || ''} · 共 ${AUTH.questions.length} 题 · 学科 ${subs.length} 类`;
+  const subs = [...new Set(view.map(q => q.s))];
+  $('aSummary').textContent = `${AUTH.name || ''} · 共 ${view.length} 题 · 学科 ${subs.length} 类`;
 }
 
 function authCollectForm() {
