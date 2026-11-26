@@ -721,7 +721,7 @@ def quiz_ai_generate(cfg, stage, grade, subject, count, topic):
             nq["id"] = quiz_next_id(out, stage, grade, subject)
             out.append(nq)
         remaining -= n
-        push("AI 出题：已生成 %d/%d 题" % (len(out), count))
+        push("AI 出题：已生成 %d/%d 题" % (len(out), count), channel="quiz")
     errors = quiz_validate(out, stage, grade, subject)
     if errors:
         raise RuntimeError("AI 题目校验未通过：" + "；".join(errors[:5]))
@@ -1581,9 +1581,9 @@ STATE = {"running": False, "lines": [], "seq": 0, "status": "就绪",
 LOCK2 = threading.Lock()
 
 
-def push(msg, status=None):
+def push(msg, status=None, channel="writer"):
     with LOCK2:
-        STATE["lines"].append(msg)
+        STATE["lines"].append({"ch": channel, "msg": msg})
         if len(STATE["lines"]) > 4000:
             drop = len(STATE["lines"]) - 1500
             STATE["lines"] = STATE["lines"][drop:]
@@ -1678,10 +1678,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/state":
             q = urllib.parse.parse_qs(parsed.query)
             since = int((q.get("since") or ["0"])[0])
+            ch = (q.get("channel") or [""])[0]
             with LOCK2:
                 if since < STATE["base"]:
                     since = STATE["base"]
                 lines = STATE["lines"][since - STATE["base"]:]
+                if ch:
+                    lines = [ln for ln in lines
+                             if (ln.get("ch") if isinstance(ln, dict) else "writer") == ch]
+                lines = [dict(ln, idx=STATE["base"] + since - STATE["base"] + i)
+                         if isinstance(ln, dict) else {"msg": ln, "idx": STATE["base"] + since - STATE["base"] + i}
+                         for i, ln in enumerate(lines)]
                 return self._send(200, {
                     "running": STATE["running"], "status": STATE["status"],
                     "seq": STATE["seq"], "from": since,
@@ -2004,7 +2011,8 @@ class Handler(BaseHTTPRequestHandler):
                 if data.get("autoupload", True):
                     result = quiz_ai_commit(
                         cfg, data.get("stage"), int(data.get("grade") or 1),
-                        data.get("subject"), questions, push)
+                        data.get("subject"), questions,
+                        lambda m: push(m, channel="quiz"))
                     resp.update({"uploaded": True, **result})
                 return self._send(200, resp)
             except Exception as exc:
@@ -2026,12 +2034,12 @@ class Handler(BaseHTTPRequestHandler):
                     cfg[k] = data[k]
             save_config(cfg)
             try:
-                result = quiz_upload_pack(cfg, push)
+                result = quiz_upload_pack(cfg, lambda m: push(m, channel="quiz"))
                 push("题库上传完成：%d 个年级文件，共 %d 题，版本 %s"
-                     % (len(result["changed"]), result["total"], result["version"]))
+                     % (len(result["changed"]), result["total"], result["version"]), channel="quiz")
                 return self._send(200, {"ok": True, **result})
             except Exception as exc:
-                push("题库上传失败：%s" % exc)
+                push("题库上传失败：%s" % exc, channel="quiz")
                 return self._send(200, {"ok": False, "msg": str(exc)[:160]})
 
         if path == "/api/delete_many":
