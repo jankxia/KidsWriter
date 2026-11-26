@@ -372,7 +372,7 @@ footer .dot.ok { background: #4fa96b; }
 
 <header>
   <h1>阅答题</h1>
-  <span class="ver">v2.1</span>
+  <span class="ver">v2.2</span>
   <span class="flow">阅读 → 写稿 → 出题 → 答题；文章与题库都在夸克网盘，电视端共用同一套</span>
   <span class="me-area">
     <span id="meInfo" class="me-info"></span>
@@ -384,10 +384,10 @@ footer .dot.ok { background: #4fa96b; }
 <button id="sideToggle" title="收起/展开侧栏">‹</button>
 
 <nav class="tabs">
-  <button class="tab-btn active" data-page="writer">写稿器</button>
+  <button class="tab-btn active" data-page="writer">写文章</button>
   <button class="tab-btn" data-page="author">加题目</button>
-  <button class="tab-btn" data-page="quiz">答题库</button>
-  <button class="tab-btn" data-page="reader">阅读</button>
+  <button class="tab-btn" data-page="quiz">立即答题</button>
+  <button class="tab-btn" data-page="reader">文章阅读</button>
 </nav>
 
 <div id="page-writer">
@@ -399,6 +399,7 @@ footer .dot.ok { background: #4fa96b; }
       <div class="field"><label>账号</label><input id="user" placeholder="admin"></div>
       <div class="field"><label>密码</label><input id="password" type="password"></div>
       <button class="btn-ghost" style="width:100%;height:34px;margin-top:4px" id="btnTest">测试连接</button>
+      <div class="conn-state"><span class="conn-dot" id="wConnDot"></span><span id="wConnMsg">未测试</span></div>
     </div>
 
     <div class="card">
@@ -929,10 +930,18 @@ async function dropSelected() {
 }
 
 async function testConn() {
-  await fetch('/api/test', {method:'POST', body: JSON.stringify({
-    server: $('server').value.trim(), user: $('user').value.trim(),
-    password: $('password').value
-  })});
+  const dot = $('wConnDot'), msg = $('wConnMsg'), btn = $('btnTest');
+  btn.disabled = true; dot.className = 'conn-dot'; msg.textContent = '连接中…';
+  try {
+    const r = await (await fetch('/api/test/conn', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ kind: 'article', server: $('server').value.trim(),
+        user: $('user').value.trim(), password: $('password').value })
+    })).json();
+    if (r.ok) { dot.className = 'conn-dot ok'; msg.textContent = r.msg || '已连接'; }
+    else { dot.className = 'conn-dot no'; msg.textContent = r.msg || '未连接'; }
+  } catch (e) { dot.className = 'conn-dot no'; msg.textContent = '未连接：' + e.message; }
+  btn.disabled = false;
 }
 
 $('btnStart').onclick = start;
@@ -1230,7 +1239,7 @@ async function authTestConn() {
   try {
     const r = await (await fetch('/api/test/conn', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ server: $('aServer').value.trim(), user: $('aUser').value.trim(), password: $('aPassword').value })
+      body: JSON.stringify({ kind: 'quiz', server: $('aServer').value.trim(), user: $('aUser').value.trim(), password: $('aPassword').value })
     })).json();
     if (r.ok) { dot.className = 'conn-dot ok'; msg.textContent = r.msg || '已连接'; }
     else { dot.className = 'conn-dot no'; msg.textContent = r.msg || '未连接'; }
@@ -1374,16 +1383,25 @@ function renderReader() {
     </div>
     <div class="reader-body">${sents}</div>`;
   $('rReader').querySelectorAll('.play').forEach(btn => {
-    btn.onclick = () => {
-      const i = +btn.dataset.i;
-      const s = a.sentences[i];
-      if (!s || !s.audio) return;
-      if (READ.audio) READ.audio.pause();
-      READ.audio = new Audio(s.audio);
-      READ.audio.play();
-      $('rReader').querySelectorAll('.r-sent').forEach(x => x.classList.toggle('on', +x.dataset.i === i));
-    };
+    btn.onclick = () => playSentence(+btn.dataset.i);
   });
+  const first = (a.sentences || []).findIndex(s => s.audio);
+  if (first >= 0) playSentence(first);
+}
+
+function playSentence(i) {
+  const a = READ.current;
+  if (!a) return;
+  const sents = a.sentences || [];
+  if (i >= sents.length) return;
+  if (READ.audio) { READ.audio.pause(); READ.audio = null; }
+  $('rReader').querySelectorAll('.r-sent').forEach(x => x.classList.toggle('on', +x.dataset.i === i));
+  const s = sents[i];
+  if (!s || !s.audio) { playSentence(i + 1); return; }
+  const au = new Audio(s.audio);
+  READ.audio = au;
+  au.onended = () => playSentence(i + 1);
+  au.play().catch(() => {});
 }
 
 $('rGrade').onchange = readerLoadList;

@@ -1814,12 +1814,19 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/test/conn":
             cfg = load_config()
+            kind = (data.get("kind") or "article").strip()
             server = (data.get("server") or cfg["server"]).strip()
             user = (data.get("user") or "admin").strip()
             password = data.get("password") or cfg["password"]
             try:
                 o = OL(server)
                 o.login(user, password)
+                if kind == "quiz":
+                    root = "/" + cfg.get("quiz_root", "夸克/CleanMiTV/quiz").strip("/")
+                    names = [e["name"] for e in o.list(root)
+                             if e["name"].endswith(".json") and e["name"] != "index.json"]
+                    return self._send(200, {"ok": True,
+                                            "msg": "连接成功，题库目录现有 %d 个年级文件" % len(names)})
                 root = "/" + (data.get("root") or cfg.get("root", "夸克/KidsReader")).strip("/")
                 n = len(o.list(root + "/content/ai"))
                 return self._send(200, {"ok": True, "msg": "连接成功，文章目录现有 %d 篇" % n})
